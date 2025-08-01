@@ -1,4 +1,6 @@
-// Reactive query system backed by Effect SQL
+// LiveStore queries with React hooks for real-time UI updates
+import { useStore, useQuery } from '@livestore/react'
+import { tables } from './schema'
 import { reactiveEventEmitter } from './schema'
 import { PersonaData } from '../shared/types/persona'
 import { MemoryEntity } from '../shared/types/memory'
@@ -7,14 +9,278 @@ import { MemoryRepository, MemoryRepositoryLive } from '../main/database/memory-
 import { DatabaseService } from '../main/database/database-service'
 import { Effect, Context } from 'effect'
 
-// Define reactive query interface
+// =============================================================================
+// LIVESTORE REACT HOOKS
+// =============================================================================
+
+// Basic queries using LiveStore
+export const useActivePersona = () => {
+  const { store } = useStore()
+  return useQuery(store.query(tables.personas.where({ isActive: true }).first()))
+}
+
+export const useAllPersonas = () => {
+  const { store } = useStore()
+  return useQuery(store.query(tables.personas.all().orderBy('createdAt', 'desc')))
+}
+
+export const usePersonaById = (id: string) => {
+  const { store } = useStore()
+  return useQuery(store.query(tables.personas.where({ id }).first()))
+}
+
+export const usePersonaMemories = (personaId: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .orderBy('createdAt', 'desc')
+    )
+  )
+}
+
+export const useMemoriesByTier = (personaId: string, tier: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId, memoryTier: tier })
+        .orderBy('importance', 'desc')
+    )
+  )
+}
+
+export const useMemoryById = (id: string) => {
+  const { store } = useStore()
+  return useQuery(store.query(tables.memoryEntities.where({ id }).first()))
+}
+
+export const useMemoryStats = (personaId: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .select({
+          totalCount: tables.memoryEntities.count(),
+          activeCount: tables.memoryEntities.where({ memoryTier: 'active' }).count(),
+          hotCount: tables.memoryEntities.where({ memoryTier: 'hot' }).count(),
+          coldCount: tables.memoryEntities.where({ memoryTier: 'cold' }).count(),
+          averageImportance: tables.memoryEntities.avg('importance')
+        })
+    )
+  )
+}
+
+export const useRecentPersonas = () => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.personas
+        .all()
+        .orderBy('updatedAt', 'desc')
+        .limit(5)
+    )
+  )
+}
+
+// =============================================================================
+// ADVANCED LIVESTORE QUERIES
+// =============================================================================
+
+// Memory Explorer specific queries
+export const useMemoriesByType = (personaId: string, type: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId, type })
+        .orderBy('createdAt', 'desc')
+    )
+  )
+}
+
+export const useMemoriesByImportance = (personaId: string, minImportance: number) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .filter(memory => memory.importance >= minImportance)
+        .orderBy('importance', 'desc')
+    )
+  )
+}
+
+export const useMemoriesByDateRange = (personaId: string, startDate: Date, endDate: Date) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .filter(memory => {
+          const memoryDate = new Date(memory.createdAt)
+          return memoryDate >= startDate && memoryDate <= endDate
+        })
+        .orderBy('createdAt', 'desc')
+    )
+  )
+}
+
+export const useMemoriesByTags = (personaId: string, tags: string[]) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .filter(memory => {
+          return tags.some(tag => memory.tags?.includes(tag))
+        })
+        .orderBy('createdAt', 'desc')
+    )
+  )
+}
+
+// Analytics queries
+export const useMemoryAnalytics = (personaId: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .select({
+          totalCount: tables.memoryEntities.count(),
+          totalSize: tables.memoryEntities.sum('content.length'),
+          averageImportance: tables.memoryEntities.avg('importance'),
+          maxImportance: tables.memoryEntities.max('importance'),
+          minImportance: tables.memoryEntities.min('importance'),
+          tierDistribution: {
+            hot: tables.memoryEntities.where({ memoryTier: 'hot' }).count(),
+            active: tables.memoryEntities.where({ memoryTier: 'active' }).count(),
+            cold: tables.memoryEntities.where({ memoryTier: 'cold' }).count()
+          },
+          typeDistribution: tables.memoryEntities.groupBy('type').count(),
+          recentActivity: tables.memoryEntities
+            .where({ personaId })
+            .filter(memory => {
+              const lastWeek = new Date()
+              lastWeek.setDate(lastWeek.getDate() - 7)
+              return new Date(memory.updatedAt) >= lastWeek
+            })
+            .count()
+        })
+    )
+  )
+}
+
+export const usePersonaAnalytics = () => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.personas
+        .all()
+        .select({
+          totalPersonas: tables.personas.count(),
+          activePersonas: tables.personas.where({ isActive: true }).count(),
+          averageMemoriesPerPersona: tables.memoryEntities.count() / tables.personas.count(),
+          recentPersonas: tables.personas
+            .filter(persona => {
+              const lastMonth = new Date()
+              lastMonth.setMonth(lastMonth.getMonth() - 1)
+              return new Date(persona.updatedAt) >= lastMonth
+            })
+            .count()
+        })
+    )
+  )
+}
+
+// Search queries
+export const useMemorySearch = (personaId: string, searchTerm: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .filter(memory => {
+          const searchLower = searchTerm.toLowerCase()
+          return (
+            memory.name?.toLowerCase().includes(searchLower) ||
+            memory.content?.toLowerCase().includes(searchLower) ||
+            memory.summary?.toLowerCase().includes(searchLower) ||
+            memory.tags?.some(tag => tag.toLowerCase().includes(searchLower))
+          )
+        })
+        .orderBy('importance', 'desc')
+    )
+  )
+}
+
+export const usePersonaSearch = (searchTerm: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.personas
+        .all()
+        .filter(persona => {
+          const searchLower = searchTerm.toLowerCase()
+          return (
+            persona.name?.toLowerCase().includes(searchLower) ||
+            persona.description?.toLowerCase().includes(searchLower)
+          )
+        })
+        .orderBy('updatedAt', 'desc')
+    )
+  )
+}
+
+// Performance monitoring queries
+export const useMemoryPerformance = (personaId: string) => {
+  const { store } = useStore()
+  return useQuery(
+    store.query(
+      tables.memoryEntities
+        .where({ personaId })
+        .select({
+          highImportanceCount: tables.memoryEntities
+            .where({ personaId })
+            .filter(memory => memory.importance >= 80)
+            .count(),
+          frequentlyAccessed: tables.memoryEntities
+            .where({ personaId })
+            .filter(memory => (memory.accessCount || 0) > 10)
+            .count(),
+          recentAccesses: tables.memoryEntities
+            .where({ personaId })
+            .filter(memory => {
+              const lastDay = new Date()
+              lastDay.setDate(lastDay.getDate() - 1)
+              return memory.lastAccessed && new Date(memory.lastAccessed) >= lastDay
+            })
+            .count()
+        })
+    )
+  )
+}
+
+// =============================================================================
+// BACKWARD COMPATIBILITY LAYER
+// =============================================================================
+
+// Database service context
+const DatabaseContext = Context.make(PersonaRepository, PersonaRepositoryLive).pipe(
+  Context.add(MemoryRepository, MemoryRepositoryLive)
+)
+
+// Define reactive query interface for backward compatibility
 interface ReactiveQuery<T> {
   subscribe(callback: (data: T) => void): () => void
   unsubscribe(): void
   getCurrentValue(): Promise<T>
 }
 
-// Create reactive query implementation
+// Create reactive query implementation for backward compatibility
 function createReactiveQuery<T>(
   queryFn: () => Promise<T>,
   options: { label: string; deps?: any[] } = { label: 'query' }
@@ -75,11 +341,6 @@ function createReactiveQuery<T>(
     }
   }
 }
-
-// Database service context
-const DatabaseContext = Context.make(PersonaRepository, PersonaRepositoryLive).pipe(
-  Context.add(MemoryRepository, MemoryRepositoryLive)
-)
 
 // Database functions connected to actual Effect SQL services
 const database = {
@@ -151,7 +412,7 @@ const database = {
 }
 
 // =============================================================================
-// BASIC QUERIES - Working Foundation
+// BACKWARD COMPATIBILITY QUERIES
 // =============================================================================
 
 export const activePersona$ = createReactiveQuery(
@@ -205,7 +466,7 @@ export const conversationById$ = (conversationId: string) => createReactiveQuery
 )
 
 // =============================================================================
-// MEMORY QUERIES
+// MEMORY QUERIES (Backward Compatibility)
 // =============================================================================
 
 export const hotMemories$ = (personaId: string) => createReactiveQuery(
@@ -225,7 +486,7 @@ export const activeMemories$ = (personaId: string) => createReactiveQuery(
 )
 
 // =============================================================================
-// UI STATE QUERIES
+// UI STATE QUERIES (Backward Compatibility)
 // =============================================================================
 
 export const uiState$ = createReactiveQuery(
@@ -234,7 +495,7 @@ export const uiState$ = createReactiveQuery(
 )
 
 // =============================================================================
-// SIMPLE FILTERED QUERIES
+// SIMPLE FILTERED QUERIES (Backward Compatibility)
 // =============================================================================
 
 export const memoriesByType$ = (personaId: string, type: string) => createReactiveQuery(
@@ -266,8 +527,4 @@ export const recentPersonas$ = createReactiveQuery(
     }).slice(0, 5)
   ),
   { label: 'recentPersonas$' }
-)
-
-// =============================================================================
-// Additional simple queries can be added here following the same patterns
-// ============================================================================= 
+) 

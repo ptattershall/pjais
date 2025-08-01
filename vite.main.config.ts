@@ -20,14 +20,23 @@ export default defineConfig({
         'path',
         'fs',
         'os',
-                'zod',
+        'zod',
         'effect',
         '@effect/schema',
         '@effect/platform',
         '@effect/opentelemetry',
-        '@effect/rpc'
+        '@effect/rpc',
+        'onnxruntime-node',
+        'better-sqlite3',
+        '@xenova/transformers'
       ]
     },
-    minify: false
+    minify: false,
+    commonjsOptions: {
+      ignoreDynamicRequires: true
+    }
+  },
+  optimizeDeps: {
+    exclude: ['onnxruntime-node', 'better-sqlite3']
   }
 });

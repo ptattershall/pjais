@@ -50,6 +50,9 @@ export class HybridDatabaseManager {
     const personaData: PersonaData = { id, ...data };
     events.personaCreated(personaData);
     
+    // Also trigger backward compatibility event
+    reactiveEventEmitter.emit('personas:updated', personaData);
+    
     return id;
   }
 
@@ -62,7 +65,10 @@ export class HybridDatabaseManager {
 
     if (updatedPersona) {
       // Trigger LiveStore event
-      events.personaUpdated(updatedPersona);
+      events.personaUpdated({ id, updates });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('personas:updated', updatedPersona);
     }
 
     return updatedPersona;
@@ -77,7 +83,10 @@ export class HybridDatabaseManager {
 
     if (success) {
       // Trigger LiveStore event
-      events.personaDeactivated({ id } as PersonaData);
+      events.personaDeactivated({ id });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('personas:updated', { id });
     }
 
     return success;
@@ -92,7 +101,10 @@ export class HybridDatabaseManager {
 
     if (success) {
       // Trigger LiveStore event
-      events.personaActivated({ id } as PersonaData);
+      events.personaActivated({ id });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('personas:updated', { id, isActive: true });
     }
 
     return success;
@@ -107,7 +119,10 @@ export class HybridDatabaseManager {
 
     if (success) {
       // Trigger LiveStore event
-      events.personaDeactivated({ id } as PersonaData);
+      events.personaDeactivated({ id });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('personas:updated', { id, isActive: false });
     }
 
     return success;
@@ -128,6 +143,9 @@ export class HybridDatabaseManager {
     const memoryData: MemoryEntity = { id, ...data };
     events.memoryEntityCreated(memoryData);
 
+    // Also trigger backward compatibility event
+    reactiveEventEmitter.emit('memoryEntities:updated', memoryData);
+
     return id;
   }
 
@@ -140,7 +158,10 @@ export class HybridDatabaseManager {
 
     if (updatedMemory) {
       // Trigger LiveStore event
-      events.memoryEntityUpdated(updatedMemory);
+      events.memoryEntityUpdated({ id, updates });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('memoryEntities:updated', updatedMemory);
     }
 
     return updatedMemory;
@@ -155,7 +176,10 @@ export class HybridDatabaseManager {
 
     if (success) {
       // Trigger LiveStore event
-      events.memoryEntityDeleted({ id } as MemoryEntity);
+      events.memoryEntityDeleted({ id, deletedAt: new Date() });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('memoryEntities:updated', { id });
     }
 
     return success;
@@ -176,7 +200,10 @@ export class HybridDatabaseManager {
       });
 
       // Trigger LiveStore event
-      events.memoryEntityAccessed(memory);
+      events.memoryEntityAccessed({ id, accessedAt: new Date() });
+      
+      // Also trigger backward compatibility event
+      reactiveEventEmitter.emit('memoryEntities:updated', memory);
     }
 
     return memory;
@@ -236,7 +263,7 @@ export class HybridDatabaseManager {
   }
 
   // =============================================================================
-  // REACTIVE QUERY HELPERS
+  // REACTIVE QUERY HELPERS (Backward Compatibility)
   // =============================================================================
 
   getActivePersona$() {

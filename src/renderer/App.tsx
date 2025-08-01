@@ -5,6 +5,7 @@ import { MainRouter } from './components/layout/MainRouter';
 import { LoadingBoundary } from './components/common/LoadingBoundary';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ErrorBoundaryProvider } from './components/common/ErrorBoundaryProvider';
+import { LiveStoreProvider } from './providers/LiveStoreProvider';
 
 type Route = 'dashboard' | 'personas' | 'memory' | 'plugins' | 'security' | 'settings';
 
@@ -17,30 +18,32 @@ const App: React.FC = () => {
   };
 
   return (
-    <ErrorBoundaryProvider
-      onError={(error, context) => {
-        console.error('Global error handler:', error, context);
-        // Additional global error handling logic can be added here
-      }}
-    >
-      <ThemeProvider>
-        <ErrorBoundary 
-          context="App"
-          showDetails={true}
-          maxRetries={3}
-          onError={(error, errorInfo) => {
-            console.error('App-level error:', error, errorInfo);
-            // Additional error handling logic can be added here
-          }}
-        >
-          <AppShell onNavigation={handleNavigation} currentRoute={currentRoute}>
-            <LoadingBoundary minHeight={400}>
-              <MainRouter currentRoute={currentRoute} userId={userId} />
-            </LoadingBoundary>
-          </AppShell>
-        </ErrorBoundary>
-      </ThemeProvider>
-    </ErrorBoundaryProvider>
+    <LiveStoreProvider>
+      <ErrorBoundaryProvider
+        onError={(error, context) => {
+          console.error('Global error handler:', error, context);
+          // Additional global error handling logic can be added here
+        }}
+      >
+        <ThemeProvider>
+          <ErrorBoundary 
+            context="App"
+            showDetails={true}
+            maxRetries={3}
+            onError={(error, errorInfo) => {
+              console.error('App-level error:', error, errorInfo);
+              // Additional error handling logic can be added here
+            }}
+          >
+            <AppShell onNavigation={handleNavigation} currentRoute={currentRoute}>
+              <LoadingBoundary minHeight={400}>
+                <MainRouter currentRoute={currentRoute} userId={userId} />
+              </LoadingBoundary>
+            </AppShell>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </ErrorBoundaryProvider>
+    </LiveStoreProvider>
   );
 };
 

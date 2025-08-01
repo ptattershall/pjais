@@ -210,6 +210,14 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
         <Box sx={{ mb: 3 }}>
           <Typography variant="h4" component="h1" gutterBottom>
             Persona Management
+            {personas.length > 0 && (
+              <Chip 
+                label={`${personas.length} persona${personas.length !== 1 ? 's' : ''}`} 
+                color="primary" 
+                size="small" 
+                sx={{ ml: 2 }}
+              />
+            )}
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Create, configure, and manage your AI personas
@@ -258,7 +266,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Typography variant="h5">{selectedPersona.avatar} {selectedPersona.name}</Typography>
+                      <Typography variant="h5">{selectedPersona.name}</Typography>
                       <Chip
                         label={selectedPersona.isActive ? 'Active' : 'Inactive'}
                         color={selectedPersona.isActive ? 'success' : 'default'}
@@ -332,7 +340,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                               <Paper sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary">Emotional State</Typography>
                                 <Typography variant="h6">
-                                  {selectedPersona.emotionalState?.primaryEmotion || 'Neutral'}
+                                  {selectedPersona.currentEmotionalState?.primaryEmotion || 'Neutral'}
                                 </Typography>
                               </Paper>
                             </Grid>
@@ -345,36 +353,35 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                       <AsyncErrorBoundary context="PersonaAdvancedEditor">
                         <PersonaAdvancedEditor
                           persona={selectedPersona}
-                          onPersonalityUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
+                          onPersonalityUpdate={(updates) => selectedPersona?.id && handleUpdatePersona(selectedPersona.id, updates)}
                           onSave={() => console.log('Persona saved')}
                           isLoading={false}
                         />
                       </AsyncErrorBoundary>
                     )}
 
-                    {viewMode === 'behavior' && (
+                    {viewMode === 'behavior' && selectedPersona?.id && (
                       <AsyncErrorBoundary context="PersonaBehaviorConfiguration">
                         <PersonaBehaviorConfiguration
-                          persona={selectedPersona}
+                          personaId={selectedPersona.id}
                           onBehaviorUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
                         />
                       </AsyncErrorBoundary>
                     )}
 
-                    {viewMode === 'emotion' && (
+                    {viewMode === 'emotion' && selectedPersona?.id && (
                       <AsyncErrorBoundary context="PersonaEmotionalProfile">
                         <PersonaEmotionalProfile
-                          persona={selectedPersona}
+                          personaId={selectedPersona.id}
                           onEmotionalStateUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
                         />
                       </AsyncErrorBoundary>
                     )}
 
-                    {viewMode === 'memory' && (
+                    {viewMode === 'memory' && selectedPersona?.id && (
                       <AsyncErrorBoundary context="PersonaMemoryDashboard">
                         <PersonaMemoryDashboard
-                          persona={selectedPersona}
-                          onMemoryConfigUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
+                          personaId={selectedPersona.id}
                         />
                       </AsyncErrorBoundary>
                     )}

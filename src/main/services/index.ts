@@ -3,7 +3,7 @@ import { PersonaManager } from './persona-manager';
 import { MemoryManager } from './memory-manager';
 import { MemoryGraphService } from './memory-graph-service';
 import { MemoryStore } from './memory-store';
-import { MemoryLoader } from './memory-loader';
+// import { MemoryLoader } from './memory-loader'; // Temporarily disabled for testing
 import { PluginManager } from './plugin-manager';
 import { ServiceManager } from './service-manager';
 import { EffectDatabaseManager } from '../database/effect-database-manager';
@@ -56,8 +56,8 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
 
     const securityManager = new SecurityManager();
     const memoryStore = new MemoryStore();
-    const memoryLoader = new MemoryLoader();
-    const memoryManager = new MemoryManager(memoryStore, memoryLoader, databaseManager, securityManager);
+    // const memoryLoader = new MemoryLoader(); // Temporarily disabled for testing
+    const memoryManager = new MemoryManager(memoryStore, null, databaseManager, securityManager); // Pass null instead of memoryLoader
     const personaManager = new PersonaManager(memoryManager);
     const pluginManager = new PluginManager(securityManager);
 

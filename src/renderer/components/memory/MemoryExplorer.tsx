@@ -13,6 +13,12 @@ import { MemoryEntity, MemoryRelationship } from '@shared/types/memory';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { AsyncErrorBoundary } from '../common/AsyncErrorBoundary';
 import { isNotNullish, safeFind, safeFilter, validateRequired } from '@shared/utils/validation';
+import { 
+  usePersonaMemories, 
+  useMemoryStats, 
+  useMemoryAnalytics,
+  useMemorySearch 
+} from '../../../livestore/queries';
 import '../../../renderer/styles/memory-graph.css';
 
 interface MemoryExplorerProps {
@@ -30,8 +36,6 @@ export const MemoryExplorer: React.FC<MemoryExplorerProps> = ({
   onMemoryEdit,
   onMemoryDelete
 }) => {
-  const [memories, setMemories] = useState<MemoryEntity[]>([]);
-  const [relationships, setRelationships] = useState<MemoryRelationship[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<MemoryEntity[]>([]);
   const [filteredRelationships, setFilteredRelationships] = useState<MemoryRelationship[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<MemoryEntity | null>(null);
@@ -41,136 +45,101 @@ export const MemoryExplorer: React.FC<MemoryExplorerProps> = ({
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Load memories and relationships
-  const loadMemoryData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Validate required parameters
-      if (!userId) {
-        throw new Error('User ID is required');
-      }
+  // Use LiveStore queries for real-time data
+  const memories = usePersonaMemories(personaId || '');
+  const memoryStats = useMemoryStats(personaId || '');
+  const memoryAnalytics = useMemoryAnalytics(personaId || '');
+  const searchResults = useMemorySearch(personaId || '', searchTerm);
 
-      // Get memories for the user/persona
-      const memoryResponse = await window.electronAPI.memory.search('', personaId);
+  // Determine which data to use based on search state
+  const currentMemories = searchTerm ? searchResults : memories;
 
-      if (memoryResponse && Array.isArray(memoryResponse)) {
-        // Validate memory data structure
-        const validMemories = memoryResponse.filter(memory => {
-          return memory && 
-                 typeof memory === 'object' && 
-                 memory.id && 
-                 memory.content !== undefined;
-        });
-
-        setMemories(validMemories);
-        
-        // For now, we'll use mock relationships since the API doesn't have relationship endpoints yet
-        const mockRelationships: MemoryRelationship[] = [];
-        setRelationships(mockRelationships);
-
-        // Calculate stats
-        const newStats = calculateMemoryStats(validMemories, mockRelationships);
-        setStats(newStats);
-      } else {
-        throw new Error('Invalid memory data received');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load memory data';
-      setError(errorMessage);
-      console.error('Memory loading error:', err);
-      // Set empty data on error
-      setMemories([]);
-      setRelationships([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, personaId]);
+  // For now, we'll use mock relationships since the API doesn't have relationship endpoints yet
+  const relationships: MemoryRelationship[] = [];
 
   // Apply filters to memories and relationships
   const applyFilters = useCallback(() => {
-    if (!isNotNullish(memories) || memories.length === 0) {
+    if (!isNotNullish(currentMemories) || currentMemories.length === 0) {
       setFilteredMemories([]);
       setFilteredRelationships([]);
       return;
     }
 
-    let filtered = [...memories];
-
-    // Apply tier filter
-    if (filters.tier) {
-      filtered = safeFilter(filtered, memory => 
-        isNotNullish(memory?.memoryTier) && memory.memoryTier === filters.tier
-      );
-    }
+    let filtered = [...currentMemories];
 
     // Apply type filter
-    if (filters.type) {
-      filtered = safeFilter(filtered, memory => 
-        isNotNullish(memory?.type) && memory.type === filters.type
-      );
+    if (filters.type && filters.type !== 'all') {
+      filtered = filtered.filter(memory => memory.type === filters.type);
+    }
+
+    // Apply tier filter
+    if (filters.tier && filters.tier !== 'all') {
+      filtered = filtered.filter(memory => memory.memoryTier === filters.tier);
     }
 
     // Apply importance filter
-    if (filters.minImportance !== undefined) {
-      filtered = safeFilter(filtered, memory => 
-        isNotNullish(memory?.importance) && memory.importance >= filters.minImportance!
-      );
-    }
-
-    // Apply search query filter
-    if (filters.searchQuery) {
-      const query = filters.searchQuery.toLowerCase();
-      filtered = filtered.filter(memory => {
-        const content = typeof memory.content === 'string' ? memory.content : JSON.stringify(memory.content);
-        return content.toLowerCase().includes(query) ||
-               (memory.tags || []).some(tag => tag.toLowerCase().includes(query));
-      });
+    if (filters.importance && filters.importance !== 'all') {
+      const importanceValue = parseInt(filters.importance);
+      if (!isNaN(importanceValue)) {
+        filtered = filtered.filter(memory => memory.importance >= importanceValue);
+      }
     }
 
     // Apply date range filter
-    if (filters.dateRange) {
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      const startDate = new Date(filters.dateRange.start);
+      const endDate = new Date(filters.dateRange.end);
       filtered = filtered.filter(memory => {
-        const createdAt = memory.createdAt ? new Date(memory.createdAt) : new Date();
-        return createdAt >= filters.dateRange!.start && createdAt <= filters.dateRange!.end;
+        const memoryDate = new Date(memory.createdAt);
+        return memoryDate >= startDate && memoryDate <= endDate;
+      });
+    }
+
+    // Apply tags filter
+    if (filters.tags && filters.tags.length > 0) {
+      filtered = filtered.filter(memory => {
+        return filters.tags!.some(tag => memory.tags?.includes(tag));
       });
     }
 
     setFilteredMemories(filtered);
 
-    // Filter relationships to only include those between filtered memories
-    const filteredMemoryIds = new Set(filtered.map(m => m.id).filter(Boolean));
+    // Filter relationships based on filtered memories
+    const filteredMemoryIds = new Set(filtered.map(m => m.id));
     const filteredRels = relationships.filter(rel => 
-      filteredMemoryIds.has(rel.fromMemoryId) && filteredMemoryIds.has(rel.toMemoryId)
+      filteredMemoryIds.has(rel.sourceId) && filteredMemoryIds.has(rel.targetId)
     );
     setFilteredRelationships(filteredRels);
 
-  }, [memories, relationships, filters]);
+    // Update stats with filtered data
+    const newStats = calculateMemoryStats(filtered, filteredRels);
+    setStats(newStats);
+  }, [currentMemories, filters, relationships]);
+
+  // Update filtered data when memories or filters change
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  // Update loading state based on data availability
+  useEffect(() => {
+    setLoading(!currentMemories);
+  }, [currentMemories]);
 
   // Handle memory selection
-  const handleMemorySelect = useCallback((memoryId: string) => {
-    if (!isNotNullish(memoryId) || !isNotNullish(memories)) {
-      console.warn('Invalid memory selection: memoryId or memories is null/undefined');
-      return;
-    }
-
-    const memory = safeFind(memories, m => m.id === memoryId);
-    if (memory) {
-      setSelectedMemory(memory);
-      onMemorySelect?.(memory);
-    } else {
-      console.warn(`Memory with ID ${memoryId} not found`);
-    }
-  }, [memories, onMemorySelect]);
+  const handleMemorySelect = useCallback((memory: MemoryEntity) => {
+    setSelectedMemory(memory);
+    onMemorySelect?.(memory);
+  }, [onMemorySelect]);
 
   // Handle memory hover
   const handleMemoryHover = useCallback((memory: MemoryEntity | null) => {
     setHoveredMemory(memory);
   }, []);
 
-  // Update filter with proper typing
+  // Handle filter changes
   const updateFilter = useCallback((key: keyof MemoryFilters, value: MemoryFilterValue) => {
     setFilters(prev => ({
       ...prev,
@@ -178,36 +147,27 @@ export const MemoryExplorer: React.FC<MemoryExplorerProps> = ({
     }));
   }, []);
 
-  // Clear filters
-  const clearFilters = useCallback(() => {
-    setFilters({});
+  // Handle search
+  const handleSearch = useCallback((term: string) => {
+    setSearchTerm(term);
   }, []);
 
-  // Load data on mount
-  useEffect(() => {
-    loadMemoryData();
-  }, [loadMemoryData]);
+  // Handle memory operations
+  const handleMemoryEdit = useCallback((memory: MemoryEntity) => {
+    onMemoryEdit?.(memory);
+  }, [onMemoryEdit]);
 
-  // Apply filters when memories or filters change
-  useEffect(() => {
-    applyFilters();
-  }, [applyFilters]);
+  const handleMemoryDelete = useCallback((memoryId: string) => {
+    onMemoryDelete?.(memoryId);
+  }, [onMemoryDelete]);
 
-  if (loading) {
-    return (
-      <div className="memory-explorer loading">
-        <div className="loading-spinner"></div>
-        <p>Loading memory graph...</p>
-      </div>
-    );
-  }
-
+  // Error handling
   if (error) {
     return (
-      <div className="memory-explorer error">
-        <h2>Memory Explorer</h2>
-        <p className="error-message">{error}</p>
-        <button onClick={loadMemoryData}>Retry</button>
+      <div className="memory-explorer-error">
+        <h3>Error Loading Memory Data</h3>
+        <p>{error}</p>
+        <button onClick={() => window.location.reload()}>Retry</button>
       </div>
     );
   }
@@ -273,124 +233,97 @@ export const MemoryExplorer: React.FC<MemoryExplorerProps> = ({
 
       case 'search':
         return (
-          <AsyncErrorBoundary context="MemoryAdvancedSearch">
+          <ErrorBoundary context="MemoryAdvancedSearch">
             <MemoryAdvancedSearch
               userId={userId}
               memories={filteredMemories}
-              onMemorySelect={(memory) => memory.id && handleMemorySelect(memory.id)}
-              onResultsChange={(results) => {
-                console.log('Search results updated:', results.length);
-              }}
-              enableSemanticSearch={true}
-              enableProvenance={true}
-              enableExport={true}
+              onSearch={handleSearch}
+              onMemorySelect={handleMemorySelect}
+              onMemoryEdit={handleMemoryEdit}
+              onMemoryDelete={handleMemoryDelete}
+              searchTerm={searchTerm}
             />
-          </AsyncErrorBoundary>
+          </ErrorBoundary>
+        );
+
+      case 'provenance':
+        return (
+          <ErrorBoundary context="MemoryProvenanceTracker">
+            <MemoryProvenanceTracker
+              userId={userId}
+              memories={filteredMemories}
+              onMemorySelect={handleMemorySelect}
+            />
+          </ErrorBoundary>
         );
 
       case 'optimization':
         return (
-          <AsyncErrorBoundary context="MemoryOptimizationEngine">
+          <ErrorBoundary context="MemoryOptimizationEngine">
             <MemoryOptimizationEngine
+              userId={userId}
               memories={filteredMemories}
-              onOptimizationComplete={(session) => {
-                console.log('Optimization completed:', session);
-                loadMemoryData();
+              onOptimizationComplete={(optimizedMemories) => {
+                console.log('Optimization completed:', optimizedMemories);
               }}
-              onOptimizationProgress={(progress) => {
-                console.log('Optimization progress:', progress);
-              }}
-              autoOptimize={false}
-              optimizationInterval={60}
             />
-          </AsyncErrorBoundary>
+          </ErrorBoundary>
         );
 
-      case 'provenance':
-        if (selectedMemory && isNotNullish(selectedMemory.id)) {
-          return (
-            <AsyncErrorBoundary context="MemoryProvenanceTracker">
-              <MemoryProvenanceTracker
-                rootMemoryId={selectedMemory.id}
-                maxDepth={3}
-                onNodeSelect={(node) => {
-                  if (!isNotNullish(node?.id)) {
-                    console.warn('Invalid node selected: node or node.id is null/undefined');
-                    return;
-                  }
-
-                  const memory = safeFind(memories, m => m.id === node.id);
-                  if (memory) {
-                    setSelectedMemory(memory);
-                    onMemorySelect?.(memory);
-                  } else {
-                    console.warn(`Memory with ID ${node.id} not found`);
-                  }
-                }}
-                onRelationshipSelect={(relationship) => {
-                  console.log('Relationship selected:', relationship);
-                }}
-                enableInteraction={true}
-                width={1000}
-                height={600}
-              />
-            </AsyncErrorBoundary>
-          );
-        } else {
-          return (
-            <div className="provenance-empty-state">
-              <h3>Memory Provenance Tracker</h3>
-              <p>Please select a memory from the graph or timeline view to explore its provenance and lineage.</p>
-              <button onClick={() => setViewMode('graph')} className="switch-view-button">
-                Go to Graph View
-              </button>
-            </div>
-          );
-        }
-
       default:
-        return null;
+        return <div>Unknown view mode: {viewMode}</div>;
     }
   };
 
   return (
     <div className="memory-explorer">
-      <header className="memory-explorer-header">
-        <div className="header-content">
-          <h1>Memory Explorer</h1>
-          <p>Visualize and navigate your AI memory landscape</p>
+      <div className="memory-explorer-header">
+        <div className="memory-explorer-controls">
+          <MemoryViewModeSelector
+            currentMode={viewMode}
+            onModeChange={setViewMode}
+            availableModes={['graph', 'timeline', 'health', 'search', 'provenance', 'optimization']}
+          />
+          
+          <MemoryFilterControls
+            filters={filters}
+            onFilterChange={updateFilter}
+            stats={stats}
+            loading={loading}
+          />
         </div>
-        
-        <MemoryViewModeSelector
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
-      </header>
 
-      <MemoryFilterControls
-        filters={filters}
-        onFilterChange={updateFilter}
-        onClearFilters={clearFilters}
-      />
+        <div className="memory-explorer-stats">
+          <MemoryStatsDisplay
+            stats={stats}
+            loading={loading}
+            totalMemories={currentMemories?.length || 0}
+            filteredCount={filteredMemories.length}
+          />
+        </div>
+      </div>
 
-      {stats && (
-        <MemoryStatsDisplay
-          filteredMemories={filteredMemories}
-          filteredRelationships={filteredRelationships}
-          stats={stats}
-        />
-      )}
-
-      <main className="memory-explorer-content">
-        {renderViewContent()}
-      </main>
-
-      <MemoryDetailsPanel
-        selectedMemory={selectedMemory}
-        hoveredMemory={hoveredMemory}
-        onEdit={onMemoryEdit}
-        onDelete={onMemoryDelete}
-      />
+      <div className="memory-explorer-content">
+        {loading ? (
+          <div className="memory-explorer-loading">
+            <div className="loading-spinner"></div>
+            <p>Loading memories...</p>
+          </div>
+        ) : (
+          <>
+            {renderViewContent()}
+            
+            {selectedMemory && (
+              <MemoryDetailsPanel
+                memory={selectedMemory}
+                onClose={() => setSelectedMemory(null)}
+                onEdit={handleMemoryEdit}
+                onDelete={handleMemoryDelete}
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }; 
