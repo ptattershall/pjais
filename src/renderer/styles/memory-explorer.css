@@ -1,0 +1,543 @@
+/* Memory Explorer Styles */
+
+.memory-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Loading and Error States */
+.memory-explorer.loading,
+.memory-explorer.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 40px;
+  text-align: center;
+}
+
+.memory-explorer.loading .loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.memory-explorer.error .error-message {
+  color: #ef4444;
+  margin: 16px 0;
+  font-size: 1.1rem;
+}
+
+.memory-explorer.error button {
+  padding: 12px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s ease;
+}
+
+.memory-explorer.error button:hover {
+  background: #2563eb;
+}
+
+/* Header */
+.memory-explorer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-content h1 {
+  margin: 0 0 4px 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.header-content p {
+  margin: 0;
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.view-mode-selector {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.view-mode-selector button {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  transition: all 0.2s ease;
+}
+
+.view-mode-selector button:hover {
+  color: #334155;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.view-mode-selector button.active {
+  background: white;
+  color: #3b82f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Controls */
+.memory-explorer-controls {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 20px 32px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.search-controls {
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #64748b;
+  min-width: 120px;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.importance-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.importance-filter label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.importance-slider {
+  width: 80px;
+}
+
+.importance-filter span {
+  font-size: 0.8rem;
+  color: #3b82f6;
+  font-weight: 600;
+  min-width: 24px;
+  text-align: center;
+}
+
+.clear-filters {
+  padding: 8px 16px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.clear-filters:hover {
+  background: #dc2626;
+}
+
+/* Stats */
+.memory-stats {
+  display: flex;
+  gap: 16px;
+  padding: 16px 32px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Content */
+.memory-explorer-content {
+  flex: 1;
+  padding: 24px 32px;
+  overflow: hidden;
+  display: flex;
+  position: relative;
+}
+
+.timeline-view,
+.health-dashboard {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 12px;
+  border: 2px dashed #e2e8f0;
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+/* Memory Details Panel */
+.memory-details-panel {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  z-index: 10;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.memory-details {
+  padding: 20px;
+}
+
+.memory-details h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+
+.memory-details h4 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.memory-details p {
+  margin: 8px 0;
+  font-size: 0.9rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.memory-details strong {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.content-preview {
+  margin-top: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #475569;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.memory-tags {
+  margin-top: 16px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag {
+  padding: 4px 8px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.action-button {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.action-button.edit {
+  background: #3b82f6;
+  color: white;
+}
+
+.action-button.edit:hover {
+  background: #2563eb;
+}
+
+.action-button.delete {
+  background: #ef4444;
+  color: white;
+}
+
+.action-button.delete:hover {
+  background: #dc2626;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .memory-details-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 100%;
+    max-width: 400px;
+    height: 100vh;
+    border-radius: 0;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@media (max-width: 768px) {
+  .memory-explorer-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 20px;
+  }
+
+  .memory-explorer-controls {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px 20px;
+    gap: 16px;
+  }
+
+  .filter-controls {
+    justify-content: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .filter-select,
+  .importance-filter {
+    width: 100%;
+  }
+
+  .memory-stats {
+    padding: 12px 20px;
+    gap: 12px;
+  }
+
+  .memory-explorer-content {
+    padding: 16px 20px;
+  }
+
+  .view-mode-selector {
+    width: 100%;
+  }
+
+  .view-mode-selector button {
+    flex: 1;
+    text-align: center;
+  }
+
+  .memory-details-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    border-radius: 0;
+    max-height: 100vh;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .memory-explorer {
+    background: #0f172a;
+  }
+
+  .memory-explorer-header,
+  .memory-explorer-controls,
+  .memory-stats {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  .header-content h1 {
+    color: #f1f5f9;
+  }
+
+  .header-content p {
+    color: #94a3b8;
+  }
+
+  .view-mode-selector {
+    background: #334155;
+  }
+
+  .view-mode-selector button.active {
+    background: #475569;
+    color: #60a5fa;
+  }
+
+  .search-input,
+  .filter-select {
+    background: #334155;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+
+  .search-input:focus,
+  .filter-select:focus {
+    border-color: #60a5fa;
+  }
+
+  .importance-filter {
+    background: #334155;
+    border-color: #475569;
+  }
+
+  .stat-card {
+    background: linear-gradient(135deg, #334155 0%, #475569 100%);
+    border-color: #475569;
+  }
+
+  .stat-value {
+    color: #f1f5f9;
+  }
+
+  .stat-label {
+    color: #94a3b8;
+  }
+
+  .memory-details-panel {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  .memory-details h3,
+  .memory-details h4,
+  .memory-details strong {
+    color: #f1f5f9;
+  }
+
+  .memory-details p {
+    color: #94a3b8;
+  }
+
+  .content-preview {
+    background: #334155;
+    border-color: #475569;
+    color: #cbd5e1;
+  }
+
+  .tag {
+    background: #1e40af;
+    color: #93c5fd;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+} 
