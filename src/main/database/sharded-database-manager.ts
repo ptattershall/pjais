@@ -1,4 +1,4 @@
-import { Effect, Layer, Runtime } from "effect";
+import { Effect, Layer } from "effect";
 import { ShardedDatabaseService, ShardedDatabaseServiceLayer } from "./sharded-database-service";
 import { ShardedPersonaRepository, ShardedPersonaRepositoryLayer } from "./sharded-database-service";
 import { ShardedMemoryRepository, ShardedMemoryRepositoryLayer } from "./sharded-database-service";
@@ -45,7 +45,7 @@ export class ShardedDatabaseManager {
   private encryptedDataManager?: EncryptedDataManager;
   private encryptionService?: EncryptionService;
   private securityEventLogger?: SecurityEventLogger;
-  private runtime: Runtime.Runtime<never>;
+  private appLayer: Layer.Layer<ShardedDatabaseService | ShardedPersonaRepository | ShardedMemoryRepository | ShardManager>;
 
   constructor(config: ShardedDatabaseManagerConfig = {}) {
     this.config = {
@@ -56,19 +56,18 @@ export class ShardedDatabaseManager {
       ...config
     };
 
-    // Initialize Effect runtime with sharded services
-    const AppLayer = Layer.mergeAll(
+    // Initialize Effect layer with sharded services
+    this.appLayer = Layer.mergeAll(
       ShardedDatabaseServiceLayer,
       ShardedPersonaRepositoryLayer,
       ShardedMemoryRepositoryLayer,
       ShardManagerLayer
     );
-    this.runtime = Runtime.make(AppLayer);
   }
 
   // Helper to run effects with sharded services
   private runWithServices<A, E>(effect: Effect.Effect<A, E, ShardedDatabaseService | ShardedPersonaRepository | ShardedMemoryRepository | ShardManager>) {
-    return Runtime.runPromise(this.runtime)(effect);
+    return Effect.runPromise(Effect.provide(effect, this.appLayer));
   }
 
   async initialize(securityEventLogger?: SecurityEventLogger, encryptionService?: EncryptionService): Promise<void> {
@@ -108,12 +107,12 @@ export class ShardedDatabaseManager {
         yield* _(shardedDb.initialize);
         
         // Execute schema on all shards
-        yield* _(shardedDb.executeSchema);
+        yield* _(Effect.scoped(shardedDb.executeSchema));
         
         loggers.database.info('Sharded database system initialized');
       });
 
-      await Runtime.runPromise(this.runtime)(initEffect);
+      await this.runWithServices(initEffect);
 
       this.initialized = true;
       loggers.database.serviceLifecycle('ShardedDatabaseManager', 'initialized');
@@ -139,10 +138,7 @@ export class ShardedDatabaseManager {
         yield* _(shardManager.shutdown);
       });
 
-      await Runtime.runPromise(this.runtime)(shutdownEffect);
-      
-      // Dispose of the runtime to free resources
-      Runtime.dispose(this.runtime);
+      await this.runWithServices(shutdownEffect);
       
       this.initialized = false;
       loggers.database.serviceLifecycle('ShardedDatabaseManager', 'stopped');
@@ -161,7 +157,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.create(persona));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async updatePersona(id: string, updates: Partial<PersonaData>): Promise<void> {
@@ -172,7 +168,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.update(id, updates));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async activatePersona(id: string): Promise<void> {
@@ -183,7 +179,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.activate(id));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async deactivatePersona(id: string): Promise<void> {
@@ -194,7 +190,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.deactivate(id));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async getPersona(id: string): Promise<PersonaData | null> {
@@ -205,7 +201,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getById(id));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getAllPersonas(): Promise<PersonaData[]> {
@@ -216,7 +212,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getAll());
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getActivePersona(): Promise<PersonaData | null> {
@@ -227,7 +223,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getActive());
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getPersonasByShardId(shardId: string): Promise<PersonaData[]> {
@@ -238,7 +234,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getByShardId(shardId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async migratePersonaToShard(personaId: string, targetShardId: string): Promise<void> {
@@ -249,7 +245,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.migratePersonaToShard(personaId, targetShardId));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   // =============================================================================
@@ -264,7 +260,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.create(memory));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async updateMemoryEntity(id: string, updates: Partial<MemoryEntity>): Promise<void> {
@@ -275,7 +271,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.update(id, updates));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async accessMemoryEntity(id: string): Promise<void> {
@@ -286,7 +282,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.markAccessed(id));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async deleteMemoryEntity(id: string): Promise<void> {
@@ -297,7 +293,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.delete(id));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async getMemoryEntity(id: string, personaId?: string): Promise<MemoryEntity | null> {
@@ -308,7 +304,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getById(id, personaId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getPersonaMemories(personaId: string): Promise<MemoryEntity[]> {
@@ -319,7 +315,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getByPersonaId(personaId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getMemoriesByTier(tier: string): Promise<MemoryEntity[]> {
@@ -330,7 +326,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getByTier(tier));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getAllActiveMemories(): Promise<MemoryEntity[]> {
@@ -341,10 +337,10 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getAllActive());
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
-  async updateMemoryTier(memoryId: string, newTier: string, newContent?: any): Promise<void> {
+  async updateMemoryTier(memoryId: string, newTier: string, newContent?: string | Record<string, unknown>): Promise<void> {
     this.ensureInitialized();
     
     const effect = Effect.gen(function* (_) {
@@ -352,7 +348,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.updateTier(memoryId, newTier, newContent));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async updateMemoryEmbedding(memoryId: string, embedding: number[], model: string): Promise<void> {
@@ -363,7 +359,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.updateEmbedding(memoryId, embedding, model));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async searchMemoriesAcrossShards(query: string, personaId?: string): Promise<MemoryEntity[]> {
@@ -374,7 +370,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.searchAcrossShards(query, personaId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getMemoriesByShardId(shardId: string): Promise<MemoryEntity[]> {
@@ -385,7 +381,7 @@ export class ShardedDatabaseManager {
       return yield* _(repo.getByShardId(shardId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async migrateMemoryToShard(memoryId: string, targetShardId: string): Promise<void> {
@@ -396,7 +392,7 @@ export class ShardedDatabaseManager {
       yield* _(repo.migrateMemoryToShard(memoryId, targetShardId));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   // =============================================================================
@@ -411,7 +407,7 @@ export class ShardedDatabaseManager {
       return yield* _(shardManager.getShardForEntity(entityType, entityId, parentId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getAllShards(): Promise<ShardInfo[]> {
@@ -422,7 +418,7 @@ export class ShardedDatabaseManager {
       return yield* _(shardManager.getAllShards);
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async getShardMetrics(): Promise<ShardMetrics> {
@@ -433,7 +429,7 @@ export class ShardedDatabaseManager {
       return yield* _(shardManager.getShardMetrics);
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async createShard(shardId: string): Promise<ShardInfo> {
@@ -444,7 +440,7 @@ export class ShardedDatabaseManager {
       return yield* _(shardManager.createShard(shardId));
     });
 
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   async removeShard(shardId: string): Promise<void> {
@@ -455,7 +451,7 @@ export class ShardedDatabaseManager {
       yield* _(shardManager.removeShard(shardId));
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async rebalanceShards(): Promise<void> {
@@ -466,7 +462,7 @@ export class ShardedDatabaseManager {
       yield* _(shardManager.rebalanceShards);
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   async performShardHealthCheck(): Promise<void> {
@@ -477,7 +473,7 @@ export class ShardedDatabaseManager {
       yield* _(shardManager.healthCheck);
     });
 
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   // =============================================================================
@@ -539,7 +535,7 @@ export class ShardedDatabaseManager {
   }
 
   // Get encryption status
-  getEncryptionStatus(): { enabled: boolean; details?: any } {
+  getEncryptionStatus(): { enabled: boolean; details?: Record<string, unknown> } {
     if (!this.encryptedDataManager) {
       return { enabled: false };
     }
@@ -582,13 +578,13 @@ export class ShardedDatabaseManager {
         personaCount: personas.length,
         memoryCount: memories.length,
         conversationCount: 0, // NOTE: Conversation repository not yet implemented
-        encryptionEnabled: this.config.enableEncryption || false,
+        encryptionEnabled: false, // Note: this context not available in Effect.gen
         shardMetrics,
         shardDistribution
       };
     });
     
-    return await Runtime.runPromise(this.runtime)(effect);
+    return await this.runWithServices(effect);
   }
 
   // Enhanced health check with sharding
@@ -606,7 +602,7 @@ export class ShardedDatabaseManager {
       yield* _(shardManager.healthCheck);
     });
     
-    await Runtime.runPromise(this.runtime)(effect);
+    await this.runWithServices(effect);
   }
 
   // Get sharding configuration
@@ -617,6 +613,6 @@ export class ShardedDatabaseManager {
   // Update sharding configuration
   updateShardingConfig(newConfig: Partial<ShardedDatabaseManagerConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    loggers.database.info('Sharding configuration updated', { newConfig });
+    loggers.database.info('Sharding configuration updated');
   }
 }

@@ -12,13 +12,13 @@ import { MemoryDetailsPanel } from './MemoryDetailsPanel';
 import { MemoryEntity, MemoryRelationship } from '@shared/types/memory';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { AsyncErrorBoundary } from '../common/AsyncErrorBoundary';
-import { isNotNullish, safeFind, safeFilter, validateRequired } from '@shared/utils/validation';
+import { isNotNullish } from '@shared/utils/validation';
 import { 
   usePersonaMemories, 
   useMemoryStats, 
   useMemoryAnalytics,
   useMemorySearch 
-} from '../../../livestore/queries';
+} from '../../../livestore/query';
 import '../../../renderer/styles/memory-graph.css';
 
 interface MemoryExplorerProps {

@@ -1,4 +1,4 @@
-import { Effect, Context } from "effect"
+import { Effect, Context, Layer } from "effect"
 import { MemoryEntity } from "../../shared/types/memory"
 import { withDatabase, DatabaseService } from "./database-service"
 
@@ -19,157 +19,161 @@ export interface MemoryRepository {
 // Create repository tag
 export const MemoryRepository = Context.GenericTag<MemoryRepository>("MemoryRepository")
 
-// Repository implementation
-export const MemoryRepositoryLive = MemoryRepository.of({
-  create: (memory) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const id = `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        
-        yield* _(client`
-          INSERT INTO memory_entities (
-            id, persona_id, type, content, tags, importance, memory_tier
-          ) VALUES (
-            ${id}, ${memory.personaId}, ${memory.type}, ${memory.content}, 
-            ${JSON.stringify(memory.tags || [])}, ${memory.importance || 50}, ${memory.memoryTier || 'hot'}
-          )
-        `)
-        
-        return id
-      })
-    ),
+// Repository implementation  
+export const MemoryRepositoryLive = Layer.effect(
+  MemoryRepository,
+  Effect.succeed({
+      create: (memory) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const id = `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            
+            yield* _(client`
+              INSERT INTO memory_entities (
+                id, persona_id, type, content, tags, importance, memory_tier
+              ) VALUES (
+                ${id}, ${memory.personaId}, ${memory.type}, ${memory.content}, 
+                ${JSON.stringify(memory.tags || [])}, ${memory.importance || 50}, ${memory.memoryTier || 'hot'}
+              )
+            `)
+            
+            return id
+          })
+        ),
 
-  update: (id, updates) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const setParts: string[] = []
-        const values: unknown[] = []
+      update: (id, updates) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const setParts: string[] = []
+            const values: (string | number | boolean)[] = []
 
-        if (updates.type !== undefined) {
-          setParts.push(`type = ?`)
-          values.push(updates.type)
-        }
-        if (updates.content !== undefined) {
-          setParts.push(`content = ?`)
-          values.push(updates.content)
-        }
+            if (updates.type !== undefined) {
+              setParts.push(`type = ?`)
+              values.push(updates.type)
+            }
+            if (updates.content !== undefined) {
+              setParts.push(`content = ?`)
+              values.push(updates.content)
+            }
 
-        if (updates.tags !== undefined) {
-          setParts.push(`tags = ?`)
-          values.push(JSON.stringify(updates.tags))
-        }
-        if (updates.importance !== undefined) {
-          setParts.push(`importance = ?`)
-          values.push(updates.importance)
-        }
+            if (updates.tags !== undefined) {
+              setParts.push(`tags = ?`)
+              values.push(JSON.stringify(updates.tags))
+            }
+            if (updates.importance !== undefined) {
+              setParts.push(`importance = ?`)
+              values.push(updates.importance)
+            }
 
-        if (setParts.length > 0) {
-          values.push(id)
-          const sql = `UPDATE memory_entities SET ${setParts.join(', ')} WHERE id = ?`
-          yield* _(client.unsafe(sql, values))
-        }
-      })
-    ),
+            if (setParts.length > 0) {
+              values.push(id)
+              const sql = `UPDATE memory_entities SET ${setParts.join(', ')} WHERE id = ?`
+              yield* _(client.unsafe(sql, values))
+            }
+          })
+        ),
 
-  getById: (id) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const rows = yield* _(client`SELECT * FROM memory_entities WHERE id = ${id} AND deleted_at IS NULL`)
-        if (rows.length === 0) {
-          return null
-        }
-        return mapRowToMemory(rows[0])
-      })
-    ),
+      getById: (id) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const rows = yield* _(client`SELECT * FROM memory_entities WHERE id = ${id} AND deleted_at IS NULL`)
+            if (rows.length === 0) {
+              return null
+            }
+            return mapRowToMemory(rows[0] as unknown as MemoryRow)
+          })
+        ),
 
-  getByPersonaId: (personaId) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const rows = yield* _(client`
-          SELECT * FROM memory_entities 
-          WHERE persona_id = ${personaId} AND deleted_at IS NULL 
-          ORDER BY created_at DESC
-        `)
-        return rows.map(mapRowToMemory)
-      })
-    ),
+      getByPersonaId: (personaId) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const rows = yield* _(client`
+              SELECT * FROM memory_entities 
+              WHERE persona_id = ${personaId} AND deleted_at IS NULL 
+              ORDER BY created_at DESC
+            `)
+            return rows.map((row) => mapRowToMemory(row as unknown as MemoryRow))
+          })
+        ),
 
-  getByTier: (tier) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const rows = yield* _(client`
-          SELECT * FROM memory_entities 
-          WHERE memory_tier = ${tier} AND deleted_at IS NULL 
-          ORDER BY created_at DESC
-        `)
-        return rows.map(mapRowToMemory)
-      })
-    ),
+      getByTier: (tier) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const rows = yield* _(client`
+              SELECT * FROM memory_entities 
+              WHERE memory_tier = ${tier} AND deleted_at IS NULL 
+              ORDER BY created_at DESC
+            `)
+            return rows.map((row) => mapRowToMemory(row as unknown as MemoryRow))
+          })
+        ),
 
-  getAllActive: () =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        const rows = yield* _(client`
-          SELECT * FROM memory_entities 
-          WHERE deleted_at IS NULL 
-          ORDER BY created_at DESC
-        `)
-        return rows.map(mapRowToMemory)
-      })
-    ),
+      getAllActive: () =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            const rows = yield* _(client`
+              SELECT * FROM memory_entities 
+              WHERE deleted_at IS NULL 
+              ORDER BY created_at DESC
+            `)
+            return rows.map((row) => mapRowToMemory(row as unknown as MemoryRow))
+          })
+        ),
 
-  updateTier: (memoryId, newTier, newContent) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        if (newContent !== undefined) {
-          yield* _(client`
-            UPDATE memory_entities 
-            SET memory_tier = ${newTier}, content = ${JSON.stringify(newContent)}
-            WHERE id = ${memoryId}
-          `)
-        } else {
-          yield* _(client`
-            UPDATE memory_entities 
-            SET memory_tier = ${newTier}
-            WHERE id = ${memoryId}
-          `)
-        }
-      })
-    ),
+      updateTier: (memoryId, newTier, newContent) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            if (newContent !== undefined) {
+              yield* _(client`
+                UPDATE memory_entities 
+                SET memory_tier = ${newTier}, content = ${JSON.stringify(newContent)}
+                WHERE id = ${memoryId}
+              `)
+            } else {
+              yield* _(client`
+                UPDATE memory_entities 
+                SET memory_tier = ${newTier}
+                WHERE id = ${memoryId}
+              `)
+            }
+          })
+        ),
 
-  updateEmbedding: (memoryId, embedding, model) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        yield* _(client`
-          UPDATE memory_entities 
-          SET embedding = ${JSON.stringify(embedding)}, embedding_model = ${model}
-          WHERE id = ${memoryId}
-        `)
-      })
-    ),
+      updateEmbedding: (memoryId, embedding, model) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            yield* _(client`
+              UPDATE memory_entities 
+              SET embedding = ${JSON.stringify(embedding)}, embedding_model = ${model}
+              WHERE id = ${memoryId}
+            `)
+          })
+        ),
 
-  markAccessed: (id) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        yield* _(client`
-          UPDATE memory_entities 
-          SET access_count = access_count + 1, last_accessed = CURRENT_TIMESTAMP
-          WHERE id = ${id}
-        `)
-      })
-    ),
+      markAccessed: (id) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            yield* _(client`
+              UPDATE memory_entities 
+              SET access_count = access_count + 1, last_accessed = ${new Date().toISOString()}
+              WHERE id = ${id}
+            `)
+          })
+        ),
 
-  delete: (id) =>
-    withDatabase((client) =>
-      Effect.gen(function* (_) {
-        yield* _(client`
-          UPDATE memory_entities 
-          SET deleted_at = CURRENT_TIMESTAMP
-          WHERE id = ${id}
-        `)
-      })
-    )
-})
+      delete: (id) =>
+        withDatabase((client) =>
+          Effect.gen(function* (_) {
+            yield* _(client`
+              UPDATE memory_entities 
+              SET deleted_at = ${new Date().toISOString()}
+              WHERE id = ${id}
+            `)
+          })
+        )
+    }
+  )
+)
 
 // Database row type for memory entity
 interface MemoryRow {
@@ -193,11 +197,11 @@ function mapRowToMemory(row: MemoryRow): MemoryEntity {
   return {
     id: row.id,
     personaId: row.personaId,
-    type: row.type,
+    type: row.type as 'text' | 'image' | 'audio' | 'video' | 'file',
     content: row.content,
     tags: JSON.parse(row.tags || '[]'),
     importance: row.importance,
-    memoryTier: row.memoryTier,
+    memoryTier: row.memoryTier as 'hot' | 'warm' | 'cold' | undefined,
     lastAccessed: row.lastAccessed ? new Date(row.lastAccessed) : undefined,
     createdAt: new Date(row.createdAt)
   }

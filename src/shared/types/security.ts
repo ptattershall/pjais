@@ -3,7 +3,7 @@ export interface SecurityEvent {
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
   timestamp: Date;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface SecurityPolicy {
@@ -55,7 +55,7 @@ export interface DataClassificationRule {
 
 export interface ClassifiedData {
   classification: DataClassification;
-  data: any;
+  data: unknown;
   metadata: {
     created: Date;
     lastAccessed: Date;
@@ -80,7 +80,7 @@ export interface DataSubjectRequest {
   status: 'pending' | 'in_progress' | 'completed' | 'denied';
   requestedAt: Date;
   completedAt?: Date;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
 }
 
 // GDPR/CCPA Compliance Types
@@ -101,5 +101,5 @@ export interface AuditTrail {
   resource: string;
   timestamp: Date;
   outcome: 'success' | 'failure';
-  details: Record<string, any>;
+  details: Record<string, unknown>;
 } 

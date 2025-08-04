@@ -1,8 +1,9 @@
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { Effect, Layer, Context, Queue, Ref, Schedule, Duration } from "effect"
+import * as Scope from "effect/Scope"
 import { app } from "electron"
-import path from "path"
-import fs from "fs"
+import * as path from "path"
+import * as fs from "fs"
 import { loggers } from "../utils/logger"
 
 export interface ConnectionPoolConfig {
@@ -25,7 +26,7 @@ export interface PooledConnection {
 }
 
 export interface ConnectionPool {
-  readonly acquire: Effect.Effect<PooledConnection, Error, never>
+  readonly acquire: Effect.Effect<PooledConnection, Error, Scope.Scope>
   readonly release: (connection: PooledConnection) => Effect.Effect<void, Error, never>
   readonly stats: Effect.Effect<ConnectionPoolStats, Error, never>
   readonly shutdown: Effect.Effect<void, Error, never>
@@ -326,7 +327,7 @@ const ConnectionPoolLive = (config: ConnectionPoolConfig = defaultConfig) =>
         healthCheck
       } as unknown as ConnectionPool
     })
-  ).pipe(Layer.scoped)
+  )
 
 // Utility function to run a query with automatic connection management
 export const withConnection = <R, E, A>(
@@ -344,17 +345,17 @@ export const withConnection = <R, E, A>(
 })
 
 // Export the layer
-export const ConnectionPoolLayer = ConnectionPoolLive().pipe(Layer.scoped)
+export const ConnectionPoolLayer = ConnectionPoolLive()
 
 // Export configured layers
-export const ConnectionPoolLayerDefault = ConnectionPoolLive(defaultConfig).pipe(Layer.scoped)
+export const ConnectionPoolLayerDefault = ConnectionPoolLive(defaultConfig)
 export const ConnectionPoolLayerHighPerformance = ConnectionPoolLive({
   ...defaultConfig,
   maxConnections: 20,
   minConnections: 5,
   cacheSize: 5000,
   enableWAL: true
-}).pipe(Layer.scoped)
+})
 
 export const ConnectionPoolLayerLowMemory = ConnectionPoolLive({
   ...defaultConfig,
@@ -362,4 +363,4 @@ export const ConnectionPoolLayerLowMemory = ConnectionPoolLive({
   minConnections: 1,
   cacheSize: 1000,
   enableWAL: false
-}).pipe(Layer.scoped)
+})

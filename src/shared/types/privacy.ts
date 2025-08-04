@@ -175,7 +175,7 @@ export interface ConsentCondition {
   id: string;
   type: 'time_limit' | 'purpose_limit' | 'data_limit' | 'access_limit';
   description: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   enforceable: boolean;
 }
 
@@ -193,9 +193,9 @@ export interface ConsentAuditEntry {
   timestamp: Date;
   userId: string;
   reason?: string;
-  previousState?: any;
-  newState?: any;
-  details: Record<string, any>;
+  previousState?: Record<string, unknown>;
+  newState?: Record<string, unknown>;
+  details: Record<string, unknown>;
 }
 
 export interface DataProcessorInfo {
@@ -227,7 +227,7 @@ export interface DataSubjectRequest {
   verificationCompleted: boolean;
   
   // Results
-  responseData?: any;
+  responseData?: Record<string, unknown>;
   actionsTaken: DataSubjectAction[];
   
   metadata: {

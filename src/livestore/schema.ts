@@ -8,6 +8,60 @@ import { EventEmitter } from 'events'
 const eventEmitter = new EventEmitter()
 
 // =============================================================================
+// EVENT PAYLOAD TYPES
+// =============================================================================
+
+interface PersonaCreatedPayload {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly personality: Record<string, unknown>
+  readonly memoryConfiguration: Record<string, unknown>
+  readonly privacySettings: Record<string, unknown>
+  readonly isActive: boolean
+}
+
+interface PersonaUpdatedPayload {
+  readonly id: string
+  readonly updates: Record<string, unknown>
+}
+
+interface PersonaActivatedPayload {
+  readonly id: string
+}
+
+interface PersonaDeactivatedPayload {
+  readonly id: string
+}
+
+interface MemoryEntityCreatedPayload {
+  readonly id: string
+  readonly personaId: string
+  readonly type: string
+  readonly name: string
+  readonly content: string
+  readonly summary: string
+  readonly tags: readonly string[]
+  readonly importance: number
+  readonly memoryTier: string
+}
+
+interface MemoryEntityUpdatedPayload {
+  readonly id: string
+  readonly updates: Record<string, unknown>
+}
+
+interface MemoryEntityAccessedPayload {
+  readonly id: string
+  readonly accessedAt: Date
+}
+
+interface MemoryEntityDeletedPayload {
+  readonly id: string
+  readonly deletedAt: Date
+}
+
+// =============================================================================
 // EVENTS DEFINITION
 // =============================================================================
 
@@ -135,7 +189,7 @@ const tables = {
 // =============================================================================
 
 const materializers = State.SQLite.materializers(events, {
-  "v1.PersonaCreated": (eventPayload: any) => {
+  "v1.PersonaCreated": (eventPayload: PersonaCreatedPayload) => {
     const { id, name, description, personality, memoryConfiguration, privacySettings, isActive } = eventPayload
     const now = new Date()
     return tables.personas.insert({
@@ -151,13 +205,13 @@ const materializers = State.SQLite.materializers(events, {
     })
   },
 
-  "v1.PersonaUpdated": (eventPayload: any) => {
+  "v1.PersonaUpdated": (eventPayload: PersonaUpdatedPayload) => {
     const { id, updates } = eventPayload
     const now = new Date()
     return tables.personas.update({ ...updates, updatedAt: now }).where({ id })
   },
 
-  "v1.PersonaActivated": (eventPayload: any) => {
+  "v1.PersonaActivated": (eventPayload: PersonaActivatedPayload) => {
     const { id } = eventPayload
     // Deactivate all personas first
     const deactivateAll = tables.personas.update({ isActive: false }).where({})
@@ -166,12 +220,12 @@ const materializers = State.SQLite.materializers(events, {
     return [deactivateAll, activateOne]
   },
 
-  "v1.PersonaDeactivated": (eventPayload: any) => {
+  "v1.PersonaDeactivated": (eventPayload: PersonaDeactivatedPayload) => {
     const { id } = eventPayload
     return tables.personas.update({ isActive: false }).where({ id })
   },
 
-  "v1.MemoryEntityCreated": (eventPayload: any) => {
+  "v1.MemoryEntityCreated": (eventPayload: MemoryEntityCreatedPayload) => {
     const { id, personaId, type, name, content, summary, tags, importance, memoryTier } = eventPayload
     const now = new Date()
     return tables.memoryEntities.insert({
@@ -189,13 +243,13 @@ const materializers = State.SQLite.materializers(events, {
     })
   },
 
-  "v1.MemoryEntityUpdated": (eventPayload: any) => {
+  "v1.MemoryEntityUpdated": (eventPayload: MemoryEntityUpdatedPayload) => {
     const { id, updates } = eventPayload
     const now = new Date()
     return tables.memoryEntities.update({ ...updates, updatedAt: now }).where({ id })
   },
 
-  "v1.MemoryEntityAccessed": (eventPayload: any) => {
+  "v1.MemoryEntityAccessed": (eventPayload: MemoryEntityAccessedPayload) => {
     const { id, accessedAt } = eventPayload
     return tables.memoryEntities.update({ 
       lastAccessed: accessedAt,
@@ -203,7 +257,7 @@ const materializers = State.SQLite.materializers(events, {
     }).where({ id })
   },
 
-  "v1.MemoryEntityDeleted": (eventPayload: any) => {
+  "v1.MemoryEntityDeleted": (eventPayload: MemoryEntityDeletedPayload) => {
     const { id, deletedAt } = eventPayload
     return tables.memoryEntities.update({ deletedAt }).where({ id })
   }
@@ -215,6 +269,9 @@ const materializers = State.SQLite.materializers(events, {
 
 const state = State.SQLite.makeState({ tables, materializers })
 export const schema = makeSchema({ events, state })
+
+// Export tables for use in queries
+export { tables }
 
 // =============================================================================
 // BACKWARD COMPATIBILITY LAYER
@@ -251,7 +308,7 @@ function createReactiveTable<T>(tableName: string): ReactiveTable<T> {
     },
 
     orderBy(field: keyof T, direction: 'asc' | 'desc' = 'asc'): ReactiveQuery<T> {
-      return createReactiveQuery<T>(tableName, { orderBy: { field, direction } })
+      return createReactiveQuery<T>(tableName, { orderBy: { field: String(field), direction } })
     },
 
     limit(count: number): ReactiveQuery<T> {
@@ -266,7 +323,13 @@ function createReactiveTable<T>(tableName: string): ReactiveTable<T> {
   }
 }
 
-function createReactiveQuery<T>(tableName: string, options: any): ReactiveQuery<T> {
+interface QueryOptions {
+  filter?: Record<string, unknown>
+  limit?: number
+  orderBy?: { field: string; direction: 'asc' | 'desc' }
+}
+
+function createReactiveQuery<T>(tableName: string, options: QueryOptions): ReactiveQuery<T> {
   return {
     subscribe(callback: (data: T) => void): () => void {
       const handler = (data: T) => callback(data)
@@ -279,7 +342,7 @@ function createReactiveQuery<T>(tableName: string, options: any): ReactiveQuery<
     },
 
     orderBy(field: keyof T, direction: 'asc' | 'desc' = 'asc'): ReactiveQuery<T> {
-      return createReactiveQuery<T>(tableName, { ...options, orderBy: { field, direction } })
+      return createReactiveQuery<T>(tableName, { ...options, orderBy: { field: String(field), direction } })
     },
 
     limit(count: number): ReactiveQuery<T> {

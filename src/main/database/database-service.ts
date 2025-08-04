@@ -1,18 +1,19 @@
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { Effect, Layer, Context } from "effect"
-import path from "path"
-import fs from "fs"
-import { ConnectionPool, ConnectionPoolLayerDefault } from "./connection-pool"
+import * as Scope from "effect/Scope"
+import * as path from "path"
+import * as fs from "fs"
+import { ConnectionPool, ConnectionPoolLayerDefault, ConnectionPoolStats } from "./connection-pool"
 import { loggers } from "../utils/logger"
 
 // Database service interface
 export interface DatabaseService {
   readonly initialize: Effect.Effect<void, Error, never>
   readonly shutdown: Effect.Effect<void, Error, never>
-  readonly getClient: Effect.Effect<SqliteClient.SqliteClient, Error, never>
-  readonly executeSchema: Effect.Effect<void, Error, never>
-  readonly withConnection: <A, E>(operation: (client: SqliteClient.SqliteClient) => Effect.Effect<A, E, never>) => Effect.Effect<A, E | Error, never>
-  readonly getPoolStats: Effect.Effect<any, Error, never>
+  readonly getClient: Effect.Effect<SqliteClient.SqliteClient, Error, Scope.Scope>
+  readonly executeSchema: Effect.Effect<void, Error, Scope.Scope>
+  readonly withConnection: <A, E>(operation: (client: SqliteClient.SqliteClient) => Effect.Effect<A, E, never>) => Effect.Effect<A, E | Error, Scope.Scope>
+  readonly getPoolStats: Effect.Effect<ConnectionPoolStats, Error, never>
   readonly healthCheck: Effect.Effect<void, Error, never>
 }
 
@@ -117,5 +118,5 @@ export const withDatabase = <A, E>(
 ): Effect.Effect<A, E | Error, DatabaseService> =>
   Effect.gen(function* (_) {
     const service = yield* _(DatabaseService)
-    return yield* _(service.withConnection(effect))
+    return yield* _(Effect.scoped(service.withConnection(effect)))
   }) 

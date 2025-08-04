@@ -9,6 +9,15 @@ export interface LogContext {
   sessionId?: string;
   duration?: number;
   metadata?: Record<string, any>;
+  result?: string;
+  securityEvent?: string;
+  severity?: string;
+  channel?: string;
+  direction?: string;
+  plugin?: string;
+  action?: string;
+  tier?: string;
+  workerId?: string;
 }
 
 export interface LogMessage {

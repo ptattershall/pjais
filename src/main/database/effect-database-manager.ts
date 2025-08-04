@@ -1,4 +1,4 @@
-import { Effect, Layer, Runtime } from "effect"
+import { Effect, Layer } from "effect"
 import { DatabaseService, DatabaseServiceLayer } from "./database-service"
 import { PersonaRepository, PersonaRepositoryLive } from "./persona-repository"
 import { MemoryRepository, MemoryRepositoryLive } from "./memory-repository"
@@ -45,22 +45,21 @@ export class EffectDatabaseManager {
   private encryptedDataManager?: EncryptedDataManager
   private encryptionService?: EncryptionService
   private securityEventLogger?: SecurityEventLogger
-  private runtime: Runtime.Runtime<never>
+  private appLayer: Layer.Layer<DatabaseService | PersonaRepository | MemoryRepository>
 
   constructor(config: DatabaseConfig = {}) {
     this.config = config
-    // Initialize Effect runtime with the application layer
-    const AppLayer = Layer.mergeAll(
+    // Initialize Effect layer with the application services
+    this.appLayer = Layer.mergeAll(
       DatabaseServiceLayer,
-      Layer.succeed(PersonaRepository, PersonaRepositoryLive),
-      Layer.succeed(MemoryRepository, MemoryRepositoryLive)
-    )
-    this.runtime = Runtime.make(AppLayer)
+      PersonaRepositoryLive,
+      MemoryRepositoryLive
+    ) as Layer.Layer<DatabaseService | PersonaRepository | MemoryRepository>
   }
 
-  // Helper to run effects with our services (now using the initialized runtime)
+  // Helper to run effects with our services
   private runWithServices<A, E>(effect: Effect.Effect<A, E, DatabaseService | PersonaRepository | MemoryRepository>) {
-    return Runtime.runPromise(this.runtime)(effect)
+    return Effect.runPromise(Effect.provide(effect, this.appLayer))
   }
 
   async initialize(securityEventLogger?: SecurityEventLogger, encryptionService?: EncryptionService): Promise<void> {
@@ -91,11 +90,11 @@ export class EffectDatabaseManager {
       // Initialize database and execute schema
       const initEffect = Effect.gen(function* (_) {
         const db = yield* _(DatabaseService)
-        yield* _(db.initialize)
-        yield* _(db.executeSchema)
+        yield* _(Effect.scoped(db.initialize))
+        yield* _(Effect.scoped(db.executeSchema))
       })
 
-      await Runtime.runPromise(this.runtime)(initEffect)
+      await this.runWithServices(initEffect)
 
       this.initialized = true
       loggers.database.serviceLifecycle('EffectDatabaseManager', 'initialized')
@@ -115,11 +114,9 @@ export class EffectDatabaseManager {
         yield* _(db.shutdown)
       })
 
-      await Runtime.runPromise(this.runtime)(shutdownEffect)
+      await this.runWithServices(shutdownEffect)
       
-      // Dispose of the runtime to free resources
-      Runtime.dispose(this.runtime)
-      
+      // Note: Runtime disposal is handled automatically by Effect
       this.initialized = false
       loggers.database.serviceLifecycle('EffectDatabaseManager', 'stopped')
     }
@@ -137,7 +134,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.create(persona))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async updatePersona(id: string, updates: Partial<PersonaData>): Promise<void> {
@@ -148,7 +145,7 @@ export class EffectDatabaseManager {
       yield* _(repo.update(id, updates))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async activatePersona(id: string): Promise<void> {
@@ -159,7 +156,7 @@ export class EffectDatabaseManager {
       yield* _(repo.activate(id))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async deactivatePersona(id: string): Promise<void> {
@@ -170,7 +167,7 @@ export class EffectDatabaseManager {
       yield* _(repo.deactivate(id))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async getPersona(id: string): Promise<PersonaData | null> {
@@ -181,7 +178,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getById(id))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async getAllPersonas(): Promise<PersonaData[]> {
@@ -192,7 +189,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getAll())
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async getActivePersona(): Promise<PersonaData | null> {
@@ -203,7 +200,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getActive())
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   // =============================================================================
@@ -218,7 +215,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.create(memory))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async updateMemoryEntity(id: string, updates: Partial<MemoryEntity>): Promise<void> {
@@ -229,7 +226,7 @@ export class EffectDatabaseManager {
       yield* _(repo.update(id, updates))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async accessMemoryEntity(id: string): Promise<void> {
@@ -240,7 +237,7 @@ export class EffectDatabaseManager {
       yield* _(repo.markAccessed(id))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async deleteMemoryEntity(id: string): Promise<void> {
@@ -251,7 +248,7 @@ export class EffectDatabaseManager {
       yield* _(repo.delete(id))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async getMemoryEntity(id: string): Promise<MemoryEntity | null> {
@@ -262,7 +259,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getById(id))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async getPersonaMemories(personaId: string): Promise<MemoryEntity[]> {
@@ -273,7 +270,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getByPersonaId(personaId))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async getMemoriesByTier(tier: string): Promise<MemoryEntity[]> {
@@ -284,7 +281,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getByTier(tier))
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async getAllActiveMemories(): Promise<MemoryEntity[]> {
@@ -295,7 +292,7 @@ export class EffectDatabaseManager {
       return yield* _(repo.getAllActive())
     })
 
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   async updateMemoryTier(memoryId: string, newTier: string, newContent?: MemoryContent): Promise<void> {
@@ -306,7 +303,7 @@ export class EffectDatabaseManager {
       yield* _(repo.updateTier(memoryId, newTier, newContent))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   async updateMemoryEmbedding(memoryId: string, embedding: number[], model: string): Promise<void> {
@@ -317,7 +314,7 @@ export class EffectDatabaseManager {
       yield* _(repo.updateEmbedding(memoryId, embedding, model))
     })
 
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   // =============================================================================
@@ -383,6 +380,8 @@ export class EffectDatabaseManager {
   async getStats(): Promise<DatabaseStats> {
     this.ensureInitialized()
     
+    const encryptionEnabled = this.config.enableEncryption || false
+    
     const effect = Effect.gen(function* (_) {
       const personaRepo = yield* _(PersonaRepository)
       const memoryRepo = yield* _(MemoryRepository)
@@ -396,12 +395,12 @@ export class EffectDatabaseManager {
         personaCount: personas.length,
         memoryCount: memories.length,
         conversationCount: 0, // NOTE: Conversation repository not yet implemented
-        encryptionEnabled: this.config.enableEncryption || false,
+        encryptionEnabled,
         connectionPool: poolStats
       }
     })
     
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 
   // Connection pool health check
@@ -413,7 +412,7 @@ export class EffectDatabaseManager {
       yield* _(db.healthCheck)
     })
     
-    await Runtime.runPromise(this.runtime)(effect)
+    await this.runWithServices(effect)
   }
 
   // Get connection pool statistics
@@ -425,6 +424,6 @@ export class EffectDatabaseManager {
       return yield* _(db.getPoolStats)
     })
     
-    return await Runtime.runPromise(this.runtime)(effect)
+    return await this.runWithServices(effect)
   }
 } 

@@ -282,14 +282,14 @@ export const formatMemoryTooltip = (memory: MemoryEntity): string => {
 
 export interface AxisConfig {
   tickCount?: number;
-  tickFormat?: (domainValue: any, index: number) => string;
+  tickFormat?: (domainValue: number | Date, index: number) => string;
   fontSize?: string;
   fontWeight?: string;
 }
 
 export const createXAxis = (
   group: SVGGroupSelection,
-  scale: any, // Use any to avoid complex type issues with D3's various scale types
+  scale: d3.ScaleTime<number, number> | d3.ScaleLinear<number, number> | d3.ScaleBand<string>,
   height: number,
   config: AxisConfig = {}
 ): void => {
@@ -314,7 +314,7 @@ export const createXAxis = (
 
 export const createYAxis = (
   group: SVGGroupSelection,
-  scale: any, // Use any to avoid complex type issues with D3's various scale types
+  scale: d3.ScaleTime<number, number> | d3.ScaleLinear<number, number> | d3.ScaleBand<string>,
   config: AxisConfig = {}
 ): void => {
   const {

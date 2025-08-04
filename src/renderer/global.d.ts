@@ -1,5 +1,17 @@
 // Global type definitions for the renderer process
 
+// Context menu types
+interface ContextMenuItem {
+  label: string;
+  type?: 'normal' | 'separator' | 'submenu' | 'checkbox' | 'radio';
+  enabled?: boolean;
+  visible?: boolean;
+  checked?: boolean;
+  accelerator?: string;
+  click?: () => void;
+  submenu?: ContextMenuItem[];
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -9,7 +21,7 @@ declare global {
         showInFolder(path: string): Promise<boolean>;
         getAppDataPath(): Promise<string>;
         getHealth(): Promise<import('@shared/types/system').SystemHealthReport>;
-        showContextMenu(template: any[], options?: { x: number; y: number }): Promise<void>;
+        showContextMenu(template: ContextMenuItem[], options?: { x: number; y: number }): Promise<void>;
         crash(): Promise<void>;
       };
       memory: {

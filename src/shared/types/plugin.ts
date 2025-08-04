@@ -63,14 +63,14 @@ export interface PluginLifecycleHooks {
 export interface PluginExecutionContext {
   pluginId: string;
   version: string;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
   dataDir: string;
   tempDir: string;
   permissions: Record<string, boolean>;
   logger: {
-    log: (message: string, ...args: any[]) => void;
-    warn: (message: string, ...args: any[]) => void;
-    error: (message: string, ...args: any[]) => void;
+    log: (message: string, ...args: unknown[]) => void;
+    warn: (message: string, ...args: unknown[]) => void;
+    error: (message: string, ...args: unknown[]) => void;
   };
 }
 

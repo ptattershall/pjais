@@ -52,7 +52,7 @@ import { LoadingBoundary } from '../common/LoadingBoundary';
 import { useReactivePersonas } from '../../hooks/useReactivePersonas';
 
 // Import types
-import { PersonaData } from '../../../shared/types/persona';
+import { PersonaData, PersonalityProfile, EmotionalState } from '../../../shared/types/persona';
 
 interface PersonaManagementProps {
   userId: string;
@@ -176,9 +176,30 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
   }, []);
 
   // Handle delete confirmation
-  const handleDeleteConfirm = useCallback((persona: PersonaData) => {
-    setPersonaToDelete(persona);
-    setDeleteDialogOpen(true);
+  const handleDeleteConfirm = useCallback((personaId: string) => {
+    const persona = personas.find(p => p.id === personaId);
+    if (persona) {
+      setPersonaToDelete(persona);
+      setDeleteDialogOpen(true);
+    }
+  }, [personas]);
+
+  // Handle personality update
+  const handlePersonalityUpdate = useCallback(async (personality: PersonalityProfile) => {
+    if (selectedPersona?.id) {
+      await handleUpdatePersona(selectedPersona.id, { personalityProfile: personality });
+    }
+  }, [selectedPersona?.id, handleUpdatePersona]);
+
+  // Handle emotional state update
+  const handleEmotionalStateUpdate = useCallback(async (personaId: string, newState: EmotionalState) => {
+    await handleUpdatePersona(personaId, { currentEmotionalState: newState });
+  }, [handleUpdatePersona]);
+
+  // Handle behavior update
+  const handleBehaviorUpdate = useCallback(async (behaviorId: string) => {
+    // This would typically update behavior configurations
+    console.log('Behavior updated:', behaviorId);
   }, []);
 
   if (loading) {
@@ -227,7 +248,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
         {/* Main Content */}
         <Grid container spacing={3}>
           {/* Persona List */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -260,7 +281,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
           </Grid>
 
           {/* Selected Persona Details */}
-          <Grid item xs={12} md={8}>
+          <Grid size={{ xs: 12, md: 8 }}>
             {selectedPersona ? (
               <Card>
                 <CardContent>
@@ -328,7 +349,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                         <Box>
                           <Typography variant="h6" gutterBottom>Overview</Typography>
                           <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
+                            <Grid size={{ xs: 12, sm: 6 }}>
                               <Paper sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary">Personality</Typography>
                                 <Typography variant="h6">
@@ -336,7 +357,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                                 </Typography>
                               </Paper>
                             </Grid>
-                            <Grid item xs={12} sm={6}>
+                            <Grid size={{ xs: 12, sm: 6 }}>
                               <Paper sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary">Emotional State</Typography>
                                 <Typography variant="h6">
@@ -353,7 +374,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                       <AsyncErrorBoundary context="PersonaAdvancedEditor">
                         <PersonaAdvancedEditor
                           persona={selectedPersona}
-                          onPersonalityUpdate={(updates) => selectedPersona?.id && handleUpdatePersona(selectedPersona.id, updates)}
+                          onPersonalityUpdate={handlePersonalityUpdate}
                           onSave={() => console.log('Persona saved')}
                           isLoading={false}
                         />
@@ -364,24 +385,24 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                       <AsyncErrorBoundary context="PersonaBehaviorConfiguration">
                         <PersonaBehaviorConfiguration
                           personaId={selectedPersona.id}
-                          onBehaviorUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
+                          onUpdate={handleBehaviorUpdate}
                         />
                       </AsyncErrorBoundary>
                     )}
 
-                    {viewMode === 'emotion' && selectedPersona?.id && (
+                    {viewMode === 'emotion' && selectedPersona && (
                       <AsyncErrorBoundary context="PersonaEmotionalProfile">
                         <PersonaEmotionalProfile
-                          personaId={selectedPersona.id}
-                          onEmotionalStateUpdate={(updates) => handleUpdatePersona(selectedPersona.id, updates)}
+                          persona={selectedPersona}
+                          onEmotionalStateUpdate={handleEmotionalStateUpdate}
                         />
                       </AsyncErrorBoundary>
                     )}
 
-                    {viewMode === 'memory' && selectedPersona?.id && (
+                    {viewMode === 'memory' && selectedPersona && (
                       <AsyncErrorBoundary context="PersonaMemoryDashboard">
                         <PersonaMemoryDashboard
-                          personaId={selectedPersona.id}
+                          persona={selectedPersona}
                         />
                       </AsyncErrorBoundary>
                     )}
@@ -444,7 +465,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
           <DialogActions>
             <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => personaToDelete && handleDeletePersona(personaToDelete.id)}
+              onClick={() => personaToDelete?.id && handleDeletePersona(personaToDelete.id)}
               color="error"
               variant="contained"
             >

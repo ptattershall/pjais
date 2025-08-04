@@ -830,7 +830,7 @@ export class PrivacyController {
     
     return significantChanges.some(path => {
       const keys = path.split('.');
-      let current: any = updates;
+      let current: Partial<EnhancedPrivacySettings> | any = updates;
       for (const key of keys) {
         if (current && current[key] !== undefined) {
           return true;

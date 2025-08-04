@@ -415,7 +415,7 @@ export const wait = (ms: number): Promise<void> =>
  */
 export const createDeferred = <T>() => {
   let resolve: (value: T) => void
-  let reject: (reason?: any) => void
+  let reject: (reason?: unknown) => void
   
   const promise = new Promise<T>((res, rej) => {
     resolve = res
@@ -460,7 +460,7 @@ export const createTestBatch = <T>(factory: () => T, count: number): T[] => {
 /**
  * Assert that a promise rejects with a specific error message
  */
-export const expectToRejectWith = async (promise: Promise<any>, expectedMessage: string) => {
+export const expectToRejectWith = async (promise: Promise<unknown>, expectedMessage: string) => {
   try {
     await promise
     throw new Error('Expected promise to reject, but it resolved')
@@ -493,7 +493,7 @@ export const expectArrayToContain = <T>(array: T[], expectedElements: T[]) => {
 /**
  * Assert that an object has specific properties with expected types
  */
-export const expectObjectShape = (obj: any, shape: Record<string, string>) => {
+export const expectObjectShape = (obj: Record<string, unknown>, shape: Record<string, string>) => {
   Object.entries(shape).forEach(([key, expectedType]) => {
     expect(obj).toHaveProperty(key)
     expect(typeof obj[key]).toBe(expectedType)

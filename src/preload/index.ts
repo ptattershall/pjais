@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { SystemHealthReport } from '../shared/types/system';
 
-// System Information Interface
+// Import types using relative paths since path aliases don't work in preload
 interface SystemInfo {
   app: string;
   electron: string;
@@ -10,7 +9,13 @@ interface SystemInfo {
   platform: string;
 }
 
-// Memory Entity Interface
+interface SystemHealthReport {
+  status: 'healthy' | 'warning' | 'error';
+  timestamp: Date;
+  metrics: Record<string, number>;
+  issues: string[];
+}
+
 interface MemoryEntity {
   id?: string;
   content: string;
@@ -22,19 +27,17 @@ interface MemoryEntity {
   lastAccessed?: Date;
 }
 
-// Persona Data Interface
 interface PersonaData {
   id?: string;
   name: string;
   description?: string;
-  personality?: Record<string, any>;
+  personality?: Record<string, unknown>;
   memories?: string[];
   isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-// Plugin Data Interface
 interface PluginData {
   id: string;
   name: string;
@@ -45,8 +48,121 @@ interface PluginData {
   enabled: boolean;
 }
 
-// Define the API that will be exposed to the renderer process
-const electronAPI = {
+// Context menu types
+interface ContextMenuItem {
+  label: string;
+  type?: 'normal' | 'separator' | 'submenu' | 'checkbox' | 'radio';
+  enabled?: boolean;
+  visible?: boolean;
+  checked?: boolean;
+  accelerator?: string;
+  click?: () => void;
+  submenu?: ContextMenuItem[];
+}
+
+// Memory optimization result types
+interface MemoryOptimizationResult {
+  processed: number;
+  transitions: Array<{
+    memoryId: string;
+    fromTier: string;
+    toTier: string;
+    reason: string;
+    score: number;
+    timestamp: Date;
+  }>;
+  performance: {
+    durationMs: number;
+    memoryFreed: number;
+    compressionRatio: number;
+  };
+}
+
+interface MemoryScore {
+  memoryId: string;
+  accessScore: number;
+  importanceScore: number;
+  ageScore: number;
+  connectionScore: number;
+  totalScore: number;
+  recommendedTier: string;
+}
+
+interface MemoryTierMetrics {
+  tier: string;
+  count: number;
+  averageImportance: number;
+  averageAccessCount: number;
+  averageAge: number;
+  storageSize: number;
+  lastOptimized: Date;
+}
+
+interface MemoryHealthReport {
+  totalMemories: number;
+  memoryByType: Record<string, number>;
+  storageSize: number;
+  lastOptimization: Date | null;
+}
+
+// Type for the electronAPI structure
+type ElectronAPIType = {
+  system: {
+    getVersion: () => Promise<SystemInfo>;
+    openExternal: (url: string) => Promise<boolean>;
+    showInFolder: (path: string) => Promise<boolean>;
+    getAppDataPath: () => Promise<string>;
+    getHealth: () => Promise<SystemHealthReport>;
+    showContextMenu: (template: ContextMenuItem[], options?: { x: number; y: number }) => Promise<void>;
+    crash: () => Promise<void>;
+  };
+  memory: {
+    create: (entity: MemoryEntity) => Promise<MemoryEntity>;
+    retrieve: (id: string) => Promise<MemoryEntity | null>;
+    delete: (id: string) => Promise<boolean>;
+    search: (query: string, personaId?: string, tierFilter?: string) => Promise<MemoryEntity[]>;
+    promote: (memoryId: string, targetTier: string) => Promise<void>;
+    demote: (memoryId: string, targetTier: string) => Promise<void>;
+    optimizeTiers: () => Promise<MemoryOptimizationResult>;
+    getScore: (memoryId: string) => Promise<MemoryScore>;
+    getTierMetrics: () => Promise<MemoryTierMetrics[]>;
+    getHealth: () => Promise<MemoryHealthReport>;
+    batchCreate: (entities: MemoryEntity[]) => Promise<MemoryEntity[]>;
+    batchRetrieve: (ids: string[]) => Promise<(MemoryEntity | null)[]>;
+    batchDelete: (ids: string[]) => Promise<boolean[]>;
+  };
+  persona: {
+    create: (data: PersonaData) => Promise<PersonaData>;
+    update: (id: string, updates: Partial<PersonaData>) => Promise<PersonaData>;
+    delete: (id: string) => Promise<boolean>;
+    get: (id: string) => Promise<PersonaData | null>;
+    list: () => Promise<PersonaData[]>;
+  };
+  plugin: {
+    install: (pluginPath?: string) => Promise<PluginData>;
+    uninstall: (pluginId: string) => Promise<boolean>;
+    enable: (pluginId: string) => Promise<boolean>;
+    disable: (pluginId: string) => Promise<boolean>;
+    list: () => Promise<PluginData[]>;
+    getDetails: (pluginId: string) => Promise<PluginData | null>;
+  };
+  performance: {
+    getMetrics: () => Promise<Record<string, number>>;
+  };
+  menu: {
+    onNewPersona: (callback: () => void) => () => void;
+    onImportPersona: (callback: () => void) => () => void;
+    onOpenSettings: (callback: () => void) => () => void;
+    onOpenPlugins: (callback: () => void) => () => void;
+    onOpenMemory: (callback: () => void) => () => void;
+    onOptimizeMemory: (callback: () => void) => () => void;
+    onShowAbout: (callback: () => void) => () => void;
+  };
+};
+
+// Expose protected methods that allow the renderer process to use
+// the ipcRenderer without exposing the entire object
+const electronAPI: ElectronAPIType = {
   // System APIs
   system: {
     getVersion: (): Promise<SystemInfo> => ipcRenderer.invoke('system:version'),
@@ -54,7 +170,7 @@ const electronAPI = {
     showInFolder: (path: string): Promise<boolean> => ipcRenderer.invoke('system:show-in-folder', path),
     getAppDataPath: (): Promise<string> => ipcRenderer.invoke('system:app-data-path'),
     getHealth: (): Promise<SystemHealthReport> => ipcRenderer.invoke('system:get-health'),
-    showContextMenu: (template: any[], options?: { x: number; y: number }) => ipcRenderer.invoke('system:show-context-menu', template, options),
+    showContextMenu: (template: ContextMenuItem[], options?: { x: number; y: number }) => ipcRenderer.invoke('system:show-context-menu', template, options),
     crash: () => ipcRenderer.invoke('system:crash'),
   },
 
@@ -69,12 +185,12 @@ const electronAPI = {
     // Tier management
     promote: (memoryId: string, targetTier: string): Promise<void> => ipcRenderer.invoke('memory:promote', memoryId, targetTier),
     demote: (memoryId: string, targetTier: string): Promise<void> => ipcRenderer.invoke('memory:demote', memoryId, targetTier),
-    optimizeTiers: (): Promise<any> => ipcRenderer.invoke('memory:optimize-tiers'),
-    getScore: (memoryId: string): Promise<any> => ipcRenderer.invoke('memory:get-score', memoryId),
-    getTierMetrics: (): Promise<any> => ipcRenderer.invoke('memory:get-tier-metrics'),
+    optimizeTiers: (): Promise<MemoryOptimizationResult> => ipcRenderer.invoke('memory:optimize-tiers'),
+    getScore: (memoryId: string): Promise<MemoryScore> => ipcRenderer.invoke('memory:get-score', memoryId),
+    getTierMetrics: (): Promise<MemoryTierMetrics[]> => ipcRenderer.invoke('memory:get-tier-metrics'),
     
     // Health and monitoring
-    getHealth: (): Promise<any> => ipcRenderer.invoke('memory:get-health'),
+    getHealth: (): Promise<MemoryHealthReport> => ipcRenderer.invoke('memory:get-health'),
     
     // Batch operations
     batchCreate: (entities: MemoryEntity[]): Promise<MemoryEntity[]> => ipcRenderer.invoke('memory:batch-create', entities),
@@ -147,33 +263,56 @@ const electronAPI = {
   }
 };
 
-// Security validation
+// Validate API structure
 function validateAPI() {
-  console.log('Validating preload API security...');
-  
-  // Ensure we're not exposing any Node.js APIs directly
-  if (typeof process !== 'undefined') {
-    console.warn('Process object detected in renderer context');
+  const requiredMethods = [
+    'system.getVersion',
+    'system.openExternal',
+    'system.showInFolder',
+    'system.getAppDataPath',
+    'system.getHealth',
+    'system.showContextMenu',
+    'memory.create',
+    'memory.retrieve',
+    'memory.delete',
+    'memory.search',
+    'persona.create',
+    'persona.update',
+    'persona.delete',
+    'persona.get',
+    'persona.list',
+    'plugin.install',
+    'plugin.uninstall',
+    'plugin.enable',
+    'plugin.disable',
+    'plugin.list',
+    'plugin.getDetails',
+    'performance.getMetrics'
+  ];
+
+  for (const method of requiredMethods) {
+    const parts = method.split('.');
+    let current: ElectronAPIType | ElectronAPIType[keyof ElectronAPIType] | any = electronAPI;
+    
+    for (const part of parts) {
+      if (!current[part]) {
+        throw new Error(`Missing required API method: ${method}`);
+      }
+      current = current[part];
+    }
+    
+    if (typeof current !== 'function') {
+      throw new Error(`API method ${method} is not a function`);
+    }
   }
-  
-  // Validate that we're running in a secure context
-  if (typeof window !== 'undefined' && typeof window.require !== 'undefined') {
-    console.error('SECURITY WARNING: require() is available in renderer context - this should not happen in sandbox mode');
-  }
-  
-  // Validate context isolation
-  if (typeof window !== 'undefined' && typeof (window as any).electronAPI !== 'undefined') {
-    console.error('SECURITY WARNING: electronAPI already exists on window - context isolation may be compromised');
-  }
-  
-  console.log('Preload API validation completed');
 }
 
-// Expose the API to the renderer process
+// Expose API to renderer process
 try {
   validateAPI();
   contextBridge.exposeInMainWorld('electronAPI', electronAPI);
   console.log('PJai\'s API successfully exposed to renderer');
 } catch (error) {
   console.error('Failed to expose API to renderer:', error);
+  throw error;
 } 
