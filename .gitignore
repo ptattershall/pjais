@@ -162,3 +162,18 @@ electron-logs/
 
 # Local development files
 .local/
+
+# Archived Docs
+docs/mvp/archive
+
+# Project-specific ignores
+docs/
+temp-test-db/
+temp-test-sandbox/
+.turbo/
+.next/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+*.bak
+*.asar
+# End of recommended ignores
