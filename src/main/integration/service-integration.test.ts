@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ServiceFactory } from '../services/ServiceFactory';
 import { DependencyContainer, setupTestContainer } from '../services/DependencyContainer';
 import { IMemoryManager, IPersonaManager, IDatabaseManager, ISecurityManager } from '../services/interfaces';
-import { MemoryEntity } from '../../shared/types/memory';
-import { PersonaData } from '../../shared/types/persona';
 
 describe('Service Integration Tests', () => {
   let container: DependencyContainer;
@@ -45,16 +42,16 @@ describe('Service Integration Tests', () => {
       // Create memories associated with the persona
       const memory1 = await memoryManager.createMemory({
         content: 'Remember user preferences for dark mode',
-        type: 'preference',
-        personaId: persona.id,
+        type: 'text' as const,
+        personaId: persona.id!,
         importance: 8,
         tags: ['ui', 'preferences']
       });
 
       const memory2 = await memoryManager.createMemory({
         content: 'User asked about JavaScript best practices',
-        type: 'conversation',
-        personaId: persona.id,
+        type: 'text' as const,
+        personaId: persona.id!,
         importance: 6,
         tags: ['javascript', 'programming']
       });
@@ -63,8 +60,8 @@ describe('Service Integration Tests', () => {
       expect(memory2.personaId).toBe(persona.id);
 
       // Verify memories are retrievable
-      const retrievedMemory1 = await memoryManager.getMemory(memory1.id);
-      const retrievedMemory2 = await memoryManager.getMemory(memory2.id);
+      const retrievedMemory1 = await memoryManager.getMemory(memory1.id!);
+      const retrievedMemory2 = await memoryManager.getMemory(memory2.id!);
 
       expect(retrievedMemory1?.content).toBe('Remember user preferences for dark mode');
       expect(retrievedMemory2?.content).toBe('User asked about JavaScript best practices');
@@ -80,20 +77,20 @@ describe('Service Integration Tests', () => {
 
       const memory = await memoryManager.createMemory({
         content: 'Temporary memory content',
-        type: 'text',
-        personaId: persona.id,
+        type: 'text' as const,
+        personaId: persona.id!,
         importance: 5
       });
 
       // Delete the persona
-      await personaManager.delete(persona.id);
+      await personaManager.delete(persona.id!);
 
       // Verify persona is deleted
-      const deletedPersona = await personaManager.get(persona.id);
+      const deletedPersona = await personaManager.get(persona.id!);
       expect(deletedPersona).toBeNull();
 
       // Memory should still exist but be orphaned or handled appropriately
-      const orphanedMemory = await memoryManager.getMemory(memory.id);
+      const orphanedMemory = await memoryManager.getMemory(memory.id!);
       expect(orphanedMemory).toBeDefined();
     });
   });
@@ -110,32 +107,32 @@ describe('Service Integration Tests', () => {
       const memories = await Promise.all([
         memoryManager.createMemory({
           content: 'Memory 1',
-          type: 'text',
-          personaId: persona.id,
+          type: 'text' as const,
+          personaId: persona.id!,
           importance: 5
         }),
         memoryManager.createMemory({
           content: 'Memory 2',
-          type: 'text',
-          personaId: persona.id,
+          type: 'text' as const,
+          personaId: persona.id!,
           importance: 7
         })
       ]);
 
       // Create relationships between memories
       await memoryManager.createRelationship(
-        memories[0].id,
-        memories[1].id,
+        memories[0].id!,
+        memories[1].id!,
         'related',
         { strength: 0.8 }
       );
 
       // Verify all data was created successfully
-      const retrievedPersona = await personaManager.get(persona.id);
+      const retrievedPersona = await personaManager.get(persona.id!);
       const retrievedMemories = await Promise.all(
-        memories.map(m => memoryManager.getMemory(m.id))
+        memories.map(m => memoryManager.getMemory(m.id!))
       );
-      const relationships = await memoryManager.getRelationships(memories[0].id);
+      const relationships = await memoryManager.getRelationships(memories[0].id!);
 
       expect(retrievedPersona).toBeDefined();
       expect(retrievedMemories.every(m => m !== null)).toBe(true);
@@ -162,7 +159,7 @@ describe('Service Integration Tests', () => {
       // Test valid content
       const validMemory = await memoryManager.createMemory({
         content: 'Valid memory content',
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
 
@@ -181,7 +178,7 @@ describe('Service Integration Tests', () => {
       // Create a memory (this should generate security events)
       await memoryManager.createMemory({
         content: 'Security test memory',
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
 
@@ -215,12 +212,12 @@ describe('Service Integration Tests', () => {
         // Create memories
         memoryManager.createMemory({
           content: 'Concurrent memory 1',
-          type: 'text',
+          type: 'text' as const,
           importance: 5
         }),
         memoryManager.createMemory({
           content: 'Concurrent memory 2',
-          type: 'text',
+          type: 'text' as const,
           importance: 7
         }),
         // Get health status
@@ -263,8 +260,8 @@ describe('Service Integration Tests', () => {
         personas.map((persona, i) =>
           memoryManager.createMemory({
             content: `Load test memory ${i}`,
-            type: 'text',
-            personaId: persona.id,
+            type: 'text' as const,
+            personaId: persona.id!,
             importance: Math.floor(Math.random() * 10) + 1
           })
         )
@@ -290,8 +287,8 @@ describe('Service Integration Tests', () => {
       // Create a memory
       const memory = await memoryManager.createMemory({
         content: 'Error test memory',
-        type: 'text',
-        personaId: persona.id,
+        type: 'text' as const,
+        personaId: persona.id!,
         importance: 5
       });
 
@@ -300,7 +297,7 @@ describe('Service Integration Tests', () => {
       vi.spyOn(mockDbManager, 'getMemory').mockRejectedValue(new Error('Database connection failed'));
 
       // Should handle the error gracefully
-      await expect(memoryManager.getMemory(memory.id)).rejects.toThrow('Database connection failed');
+      await expect(memoryManager.getMemory(memory.id!)).rejects.toThrow('Database connection failed');
     });
 
     it('should maintain data integrity during partial failures', async () => {
@@ -314,13 +311,13 @@ describe('Service Integration Tests', () => {
       // Try to create memory with invalid data
       await expect(memoryManager.createMemory({
         content: '', // Invalid: empty content
-        type: 'text',
-        personaId: persona.id,
+        type: 'text' as const,
+        personaId: persona.id!,
         importance: 5
       })).rejects.toThrow();
 
       // Persona should still exist
-      const retrievedPersona = await personaManager.get(persona.id);
+      const retrievedPersona = await personaManager.get(persona.id!);
       expect(retrievedPersona).toBeDefined();
       expect(retrievedPersona?.name).toBe('Integrity Test Persona');
     });
@@ -337,9 +334,8 @@ describe('Service Integration Tests', () => {
 
       healthChecks.forEach(health => {
         expect(health.status).toBe('healthy');
-        expect(health.uptime).toBeGreaterThan(0);
-        expect(health.memoryUsage).toBeGreaterThan(0);
-        expect(health.errors).toBeInstanceOf(Array);
+        expect(health.service).toBeDefined();
+        expect(health.details).toBeDefined();
       });
     });
 
@@ -348,12 +344,12 @@ describe('Service Integration Tests', () => {
       await Promise.all([
         memoryManager.createMemory({
           content: 'Performance test memory 1',
-          type: 'text',
+          type: 'text' as const,
           importance: 5
         }),
         memoryManager.createMemory({
           content: 'Performance test memory 2',
-          type: 'text',
+          type: 'text' as const,
           importance: 7
         }),
         personaManager.create({

@@ -1,11 +1,11 @@
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest'
+import { describe } from 'vitest'
 import { it as effectIt, expect } from '@effect/vitest'
-import { Effect, Layer, Context, Exit } from 'effect'
+import { Effect, Layer, Exit } from 'effect'
 import { SqlClient } from '@effect/sql'
 import { SqliteClient } from '@effect/sql-sqlite-node'
 import { MemoryRepository, MemoryRepositoryLive } from './memory-repository'
-import { DatabaseService, DatabaseServiceLive } from './database-service'
-import { MemoryEntity, MemoryTier } from '../../shared/types/memory'
+import { DatabaseServiceLayer } from './database-service'
+import { MemoryEntity } from '../../shared/types/memory'
 
 // Test database layer with in-memory SQLite
 const TestSqliteLive = SqliteClient.layer({
@@ -16,7 +16,7 @@ const TestSqliteLive = SqliteClient.layer({
 // Combined test layer
 const TestLive = Layer.mergeAll(
   TestSqliteLive,
-  DatabaseServiceLive,
+  DatabaseServiceLayer,
   MemoryRepositoryLive
 )
 
@@ -292,10 +292,9 @@ describe('MemoryRepository', () => {
     effectIt('should retrieve all non-deleted memories', () =>
       Effect.gen(function* () {
         const repo = yield* MemoryRepository
-        
         // Create multiple memories
-        const id1 = yield* repo.create(createTestMemoryEntity({ content: 'Active memory 1' }))
-        const id2 = yield* repo.create(createTestMemoryEntity({ content: 'Active memory 2' }))
+        yield* repo.create(createTestMemoryEntity({ content: 'Active memory 1' }))
+        yield* repo.create(createTestMemoryEntity({ content: 'Active memory 2' }))
         const id3 = yield* repo.create(createTestMemoryEntity({ content: 'Memory to delete' }))
         
         // Delete one memory
@@ -365,9 +364,7 @@ describe('MemoryRepository', () => {
       Effect.gen(function* () {
         const repo = yield* MemoryRepository
         const testData = createTestMemoryEntity({ content: 'Unchanged content' })
-        
         const memoryId = yield* repo.create(testData)
-        const before = yield* repo.getById(memoryId)
         
         yield* repo.update(memoryId, {})
         
@@ -428,10 +425,10 @@ describe('MemoryRepository', () => {
         
         // Verify embedding was stored (would need to check database directly)
         const sql = yield* SqlClient.SqlClient
-        const rows = yield* sql`SELECT embedding, embedding_model FROM memory_entities WHERE id = ${memoryId}`
-        
+        const rows = yield* sql`SELECT embedding, embedding_model FROM memory_entities WHERE id = ${String(memoryId)}`
         expect(rows).toHaveLength(1)
-        expect(JSON.parse(rows[0].embedding)).toEqual(embedding)
+        expect(rows[0].embedding).not.toBeNull()
+        expect(JSON.parse(String(rows[0].embedding))).toEqual(embedding)
         expect(rows[0].embedding_model).toBe(model)
       })
       .pipe(Effect.provide(TestLive))
@@ -453,7 +450,7 @@ describe('MemoryRepository', () => {
         
         // Check access count directly in database
         const sql = yield* SqlClient.SqlClient
-        const rows = yield* sql`SELECT access_count, last_accessed FROM memory_entities WHERE id = ${memoryId}`
+        const rows = yield* sql`SELECT access_count, last_accessed FROM memory_entities WHERE id = ${String(memoryId)}`
         
         expect(rows).toHaveLength(1)
         expect(rows[0].access_count).toBe(3)
@@ -515,31 +512,25 @@ describe('MemoryRepository', () => {
   describe('error handling', () => {
     effectIt('should handle database connection errors gracefully', () =>
       Effect.gen(function* () {
-        // Create a mock repository that fails
-        const FailingRepo = MemoryRepository.of({
-          create: () => Effect.fail(new Error('Database connection failed')),
-          update: () => Effect.fail(new Error('Database connection failed')),
-          getById: () => Effect.fail(new Error('Database connection failed')),
-          getByPersonaId: () => Effect.fail(new Error('Database connection failed')),
-          getByTier: () => Effect.fail(new Error('Database connection failed')),
-          getAllActive: () => Effect.fail(new Error('Database connection failed')),
-          updateTier: () => Effect.fail(new Error('Database connection failed')),
-          updateEmbedding: () => Effect.fail(new Error('Database connection failed')),
-          markAccessed: () => Effect.fail(new Error('Database connection failed')),
-          delete: () => Effect.fail(new Error('Database connection failed'))
-        })
-
-        const TestLayerWithFailure = Layer.succeed(MemoryRepository, FailingRepo)
-        
         const repo = yield* MemoryRepository
         const result = yield* Effect.exit(repo.create(createTestMemoryEntity()))
-        
         expect(Exit.isFailure(result)).toBe(true)
         if (Exit.isFailure(result)) {
           expect(result.cause._tag).toBe('Die')
         }
       })
-      .pipe(Effect.provide(TestLayerWithFailure))
+      .pipe(Effect.provide(Layer.succeed(MemoryRepository, MemoryRepository.of({
+        create: () => Effect.fail(new Error('Database connection failed')),
+        update: () => Effect.fail(new Error('Database connection failed')),
+        getById: () => Effect.fail(new Error('Database connection failed')),
+        getByPersonaId: () => Effect.fail(new Error('Database connection failed')),
+        getByTier: () => Effect.fail(new Error('Database connection failed')),
+        getAllActive: () => Effect.fail(new Error('Database connection failed')),
+        updateTier: () => Effect.fail(new Error('Database connection failed')),
+        updateEmbedding: () => Effect.fail(new Error('Database connection failed')),
+        markAccessed: () => Effect.fail(new Error('Database connection failed')),
+        delete: () => Effect.fail(new Error('Database connection failed'))
+      }))))
     )
   })
 
@@ -594,7 +585,7 @@ describe('MemoryRepository', () => {
         const memory = yield* repo.getById(memoryId)
         
         expect(memory?.createdAt).toBeInstanceOf(Date)
-        expect(memory?.createdAt.getTime()).toBeLessThanOrEqual(Date.now())
+        expect(memory?.createdAt?.getTime()).toBeLessThanOrEqual(Date.now())
         
         // Test last accessed timestamp
         yield* repo.markAccessed(memoryId)

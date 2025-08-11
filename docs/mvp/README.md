@@ -39,7 +39,7 @@ docs/mvp/
 - **Memory System**: All 4 phases complete (516 lines + tests)
 - **Privacy Controls**: GDPR/CCPA compliant (1118 lines)
 - **Security Framework**: Encryption + sandbox (425 lines)
-- **Database Layer**: Effect SQL + LiveStore ready (446 lines)
+- **Database Layer**: better-sqlite3 + Drizzle ORM + TanStack Query (migrated from LiveStore)
 - **UI Foundation**: Material-UI + glass morphism theme
 
 ### 🔄 **IN PROGRESS**

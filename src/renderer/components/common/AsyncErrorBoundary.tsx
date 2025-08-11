@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, ReactNode } from 'react';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
@@ -43,9 +43,9 @@ export function useAsyncErrorHandler() {
       });
 
       // Send to main process if available
-      if (window.electronAPI?.system?.logError) {
-        window.electronAPI.system.logError({
-          id: `async-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      if (window.electronAPI?.system && typeof (window.electronAPI.system as any).logError === 'function') {
+        (window.electronAPI.system as any).logError({
+          id: `async-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
           error: {
             message: errorObj.message,
             stack: errorObj.stack,

@@ -27,7 +27,7 @@ export function ErrorBoundaryProvider({ children, onError }: ErrorBoundaryProvid
 
   const reportError = useCallback((error: Error, context?: string) => {
     const errorReport: ErrorReport = {
-      id: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `error-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       error,
       context,
       timestamp: Date.now(),
@@ -38,8 +38,8 @@ export function ErrorBoundaryProvider({ children, onError }: ErrorBoundaryProvid
     onError?.(error, context);
 
     // Send to main process
-    if (window.electronAPI?.system?.logError) {
-      window.electronAPI.system.logError({
+    if (window.electronAPI?.system && typeof (window.electronAPI.system as any).logError === 'function') {
+      (window.electronAPI.system as any).logError({
         id: errorReport.id,
         error: {
           message: error.message,

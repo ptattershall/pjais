@@ -1,6 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { RateLimiter } from '../utils/rate-limiter';
-import { SecurityManager } from '../services/security-manager';
 import { Services } from '../services';
 import { SecurityEvent } from '../../shared/types/security';
 
@@ -18,7 +17,7 @@ interface HandlerOptions {
 // A generic rate limiter for all IPC calls
 const generalRateLimiter = new RateLimiter({ windowMs: 1000, max: 20 }); // 20 requests per second
 
-export function handle<T extends unknown[], R>(
+export function handle<T extends any[], R>(
   channel: string,
   handler: (event: IpcMainInvokeEvent, ...args: T) => R | Promise<R>,
   services: Services,
@@ -31,7 +30,7 @@ export function handle<T extends unknown[], R>(
     ? new RateLimiter({ windowMs: rateLimit.duration * 1000, max: rateLimit.points })
     : null;
 
-  ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: T) => {
+  ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: any[]) => {
     const windowId = event.sender.id;
     const generalKey = `${channel}-${windowId}`;
     const specificKey = `${channel}-${windowId}`;
@@ -45,6 +44,7 @@ export function handle<T extends unknown[], R>(
           type: 'security',
           severity: 'medium',
           description: `Rate limit exceeded for channel: ${channel}`,
+          timestamp: new Date(),
           details: {
             channel,
             windowId,
@@ -66,6 +66,7 @@ export function handle<T extends unknown[], R>(
           type: 'security',
           severity: 'high',
           description: `Specific rate limit exceeded for channel: ${channel}`,
+          timestamp: new Date(),
           details: {
             channel,
             windowId,
@@ -80,11 +81,9 @@ export function handle<T extends unknown[], R>(
     
     // 3. Execute the actual handler and audit the outcome
     const startTime = Date.now();
-    let success = false;
     
     try {
-      const result = await handler(event, ...args);
-      success = true;
+      const result = await handler(event, ...args as T);
       
       // Update rate limiters with success status
       generalRateLimiter.check(generalKey, true);
@@ -97,6 +96,7 @@ export function handle<T extends unknown[], R>(
           type: audit.type,
           severity: audit.severity || 'low',
           description: `IPC channel invoked and succeeded: ${channel}`,
+          timestamp: new Date(),
           details: { 
             args: args.length, // Don't log actual args for security
             durationMs: Date.now() - startTime,
@@ -117,6 +117,7 @@ export function handle<T extends unknown[], R>(
           type: audit.type,
           severity: 'high', // Always high for errors
           description: `IPC channel invoked and failed: ${channel}`,
+          timestamp: new Date(),
           details: { 
             args: args.length, // Don't log actual args for security
             durationMs: Date.now() - startTime,

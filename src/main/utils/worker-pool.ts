@@ -199,13 +199,13 @@ export class WorkerPool {
     // Find the worker handling this task
     const worker = this.workers.find(w => w.taskId === taskId);
     if (worker) {
-      loggers.worker.warn('Terminating worker due to timeout', { taskId, workerId: worker.worker.threadId });
+      loggers.worker.warn('Terminating worker due to timeout', { taskId, workerId: String(worker.worker.threadId) });
       this.terminateWorker(worker);
     }
   }
 
   private handleWorkerError(worker: WorkerInstance, error: Error): void {
-    loggers.worker.error('Worker error occurred', { workerId: worker.worker.threadId }, error);
+    loggers.worker.error('Worker error occurred', { workerId: String(worker.worker.threadId) }, error);
     
     // If worker was handling a task, reject it
     const pendingTask = this.taskQueue.find(t => t.task.id === worker.taskId);

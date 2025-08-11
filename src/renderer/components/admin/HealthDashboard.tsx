@@ -14,7 +14,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   IconButton,
   Tooltip,
 } from '@mui/material';
@@ -72,12 +71,12 @@ export const HealthDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<HealthMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh] = useState(true);
 
   const fetchHealthMetrics = async () => {
     try {
-      if (window.electronAPI?.system?.getHealthMetrics) {
-        const healthData = await window.electronAPI.system.getHealthMetrics();
+      if (window.electronAPI?.system?.getHealth) {
+        const healthData = await window.electronAPI.system.getHealth();
         setMetrics(healthData);
         setError('');
       } else {
@@ -233,7 +232,7 @@ export const HealthDashboard: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* System Metrics */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -262,7 +261,7 @@ export const HealthDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -291,7 +290,7 @@ export const HealthDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -318,7 +317,7 @@ export const HealthDashboard: React.FC = () => {
         </Grid>
 
         {/* Service Status */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -369,7 +368,7 @@ export const HealthDashboard: React.FC = () => {
         </Grid>
 
         {/* Performance Metrics */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>

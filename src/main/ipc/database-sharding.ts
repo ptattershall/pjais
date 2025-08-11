@@ -1,75 +1,76 @@
 import { DatabaseShardingService } from '../services/database-sharding-service';
 import { ShardInfo, ShardMetrics } from '../database/shard-manager';
 import { Services } from '../services';
+import { IpcMainEvent } from 'electron';
 
-export const createDatabaseShardingHandlers = (databaseShardingService: DatabaseShardingService, services: Services) => {
+export const createDatabaseShardingHandlers = (databaseShardingService: DatabaseShardingService, _services: Services) => {
   return {
     // Shard management
-    createShard: async (event: any, shardId: string): Promise<ShardInfo> => {
+    createShard: async (_event: IpcMainEvent, shardId: string): Promise<ShardInfo> => {
       return databaseShardingService.createShard(shardId);
     },
 
-    removeShard: async (event: any, shardId: string): Promise<void> => {
+    removeShard: async (_event: IpcMainEvent, shardId: string): Promise<void> => {
       return databaseShardingService.removeShard(shardId);
     },
 
-    getAllShards: async (event: any): Promise<ShardInfo[]> => {
+    getAllShards: async (_event: IpcMainEvent): Promise<ShardInfo[]> => {
       return databaseShardingService.getAllShards();
     },
 
-    getShardMetrics: async (event: any): Promise<ShardMetrics> => {
+    getShardMetrics: async (_event: IpcMainEvent): Promise<ShardMetrics> => {
       return databaseShardingService.getShardMetrics();
     },
 
-    getShardForEntity: async (event: any, entityType: string, entityId: string, parentId?: string): Promise<ShardInfo> => {
+    getShardForEntity: async (_event: IpcMainEvent, entityType: string, entityId: string, parentId?: string): Promise<ShardInfo> => {
       return databaseShardingService.getShardForEntity(entityType, entityId, parentId);
     },
 
     // Rebalancing and migration
-    performRebalance: async (event: any): Promise<void> => {
+    performRebalance: async (_event: IpcMainEvent): Promise<void> => {
       return databaseShardingService.performRebalance();
     },
 
-    performHealthCheck: async (event: any): Promise<void> => {
+    performHealthCheck: async (_event: IpcMainEvent): Promise<void> => {
       return databaseShardingService.performHealthCheck();
     },
 
-    migratePersonaToShard: async (event: any, personaId: string, targetShardId: string): Promise<void> => {
+    migratePersonaToShard: async (_event: IpcMainEvent, personaId: string, targetShardId: string): Promise<void> => {
       return databaseShardingService.migratePersonaToShard(personaId, targetShardId);
     },
 
-    migrateMemoryToShard: async (event: any, memoryId: string, targetShardId: string): Promise<void> => {
+    migrateMemoryToShard: async (_event: IpcMainEvent, memoryId: string, targetShardId: string): Promise<void> => {
       return databaseShardingService.migrateMemoryToShard(memoryId, targetShardId);
     },
 
     // Statistics and monitoring
-    getShardingStatistics: async (event: any) => {
+    getShardingStatistics: async (_event: IpcMainEvent) => {
       return databaseShardingService.getShardingStatistics();
     },
 
     // Configuration
-    updateShardingConfig: async (event: any, config: any) => {
+    updateShardingConfig: async (_event: IpcMainEvent, config: Partial<DatabaseShardingService['config']>) => {
       return databaseShardingService.updateConfig(config);
     },
 
-    getShardingConfig: async (event: any) => {
+    getShardingConfig: async (_event: IpcMainEvent) => {
       return databaseShardingService.getConfig();
     },
 
-    isShardingEnabled: async (event: any): Promise<boolean> => {
+    isShardingEnabled: async (_event: IpcMainEvent): Promise<boolean> => {
       return databaseShardingService.isShardingEnabled();
     },
 
     // Data queries across shards
-    searchMemoriesAcrossShards: async (event: any, query: string, personaId?: string) => {
+    searchMemoriesAcrossShards: async (_event: IpcMainEvent, query: string, personaId?: string) => {
       return databaseShardingService.searchMemoriesAcrossShards(query, personaId);
     },
 
-    getPersonasByShardId: async (event: any, shardId: string) => {
+    getPersonasByShardId: async (_event: IpcMainEvent, shardId: string) => {
       return databaseShardingService.getPersonasByShardId(shardId);
     },
 
-    getMemoriesByShardId: async (event: any, shardId: string) => {
+    getMemoriesByShardId: async (_event: IpcMainEvent, shardId: string) => {
       return databaseShardingService.getMemoriesByShardId(shardId);
     }
   };

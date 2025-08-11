@@ -31,7 +31,7 @@ export const SecurityDashboard: React.FC = () => {
       </Alert>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -46,7 +46,7 @@ export const SecurityDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -61,7 +61,7 @@ export const SecurityDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -78,4 +78,4 @@ export const SecurityDashboard: React.FC = () => {
       </Grid>
     </Box>
   );
-}; 
+};

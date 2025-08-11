@@ -10,6 +10,7 @@ import { SecurityEvent } from '../../shared/types/security';
 import { ServiceHealth } from '../../shared/types/system';
 import { PluginManifest } from '../../shared/types/plugin';
 import * as path from 'path';
+import { app } from 'electron';
 
 export interface SecurityManagerConfig {
   enforceCSP?: boolean;
@@ -668,6 +669,182 @@ export class SecurityManager {
 
   getSecurityEvents(filter?: any): SecurityEvent[] {
     return this.eventLogger.getEvents(filter);
+  }
+
+  // =============================================================================
+  // FILE ACCESS VALIDATION METHODS
+  // =============================================================================
+
+  async validateFileAccess(filePath: string, operation: 'read' | 'write' | 'execute'): Promise<boolean> {
+    this.ensureInitialized();
+    
+    try {
+      // Basic path validation
+      if (!filePath || typeof filePath !== 'string') {
+        return false;
+      }
+
+      // Check if path is within allowed directories
+      const allowedPaths = [
+        app.getPath('userData'),
+        app.getPath('temp'),
+        app.getPath('downloads'),
+        // Add other safe paths as needed
+      ];
+
+      const normalizedPath = path.resolve(filePath);
+      const isAllowed = allowedPaths.some(allowedPath => 
+        normalizedPath.startsWith(path.resolve(allowedPath))
+      );
+
+      if (!isAllowed) {
+        this.eventLogger.log({
+          type: 'file_access',
+          severity: 'high',
+          description: `File access denied: ${filePath}`,
+          timestamp: new Date(),
+          details: { 
+            filePath, 
+            operation, 
+            reason: 'path_not_allowed',
+            normalizedPath 
+          }
+        });
+        return false;
+      }
+
+      // Check file existence and permissions
+      const fs = require('fs');
+      const stats = await fs.promises.stat(filePath);
+      
+      // Validate operation-specific permissions
+      switch (operation) {
+        case 'read':
+          if (!stats.isFile() && !stats.isDirectory()) {
+            return false;
+          }
+          break;
+        case 'write':
+          // Additional write permission checks could be added here
+          break;
+        case 'execute':
+          // Additional execute permission checks could be added here
+          break;
+      }
+
+      this.eventLogger.log({
+        type: 'file_access',
+        severity: 'low',
+        description: `File access granted: ${filePath}`,
+        timestamp: new Date(),
+        details: { filePath, operation }
+      });
+
+      return true;
+    } catch (error) {
+      this.eventLogger.log({
+        type: 'file_access',
+        severity: 'medium',
+        description: `File access validation failed: ${filePath}`,
+        timestamp: new Date(),
+        details: { 
+          filePath, 
+          operation, 
+          error: error instanceof Error ? error.message : String(error) 
+        }
+      });
+      return false;
+    }
+  }
+
+  // =============================================================================
+  // EVENT LOGGING METHODS
+  // =============================================================================
+
+  logEvent(event: SecurityEvent): void {
+    this.ensureInitialized();
+    this.eventLogger.log(event);
+  }
+
+  // =============================================================================
+  // NETWORK ACCESS VALIDATION METHODS
+  // =============================================================================
+
+  async validateNetworkAccess(url: string, operation: 'connect' | 'download' | 'upload'): Promise<boolean> {
+    this.ensureInitialized();
+    
+    try {
+      // Basic URL validation
+      if (!url || typeof url !== 'string') {
+        return false;
+      }
+
+      // Check if URL uses allowed protocols
+      const allowedProtocols = ['http:', 'https:'];
+      const urlObj = new URL(url);
+      
+      if (!allowedProtocols.includes(urlObj.protocol)) {
+        this.eventLogger.log({
+          type: 'network_access',
+          severity: 'high',
+          description: `Network access denied: ${url}`,
+          timestamp: new Date(),
+          details: { 
+            url, 
+            operation, 
+            reason: 'protocol_not_allowed',
+            protocol: urlObj.protocol 
+          }
+        });
+        return false;
+      }
+
+      // Check for blocked domains (could be expanded)
+      const blockedDomains = [
+        'localhost',
+        '127.0.0.1',
+        // Add other blocked domains as needed
+      ];
+
+      if (blockedDomains.includes(urlObj.hostname)) {
+        this.eventLogger.log({
+          type: 'network_access',
+          severity: 'high',
+          description: `Network access denied: ${url}`,
+          timestamp: new Date(),
+          details: { 
+            url, 
+            operation, 
+            reason: 'domain_blocked',
+            hostname: urlObj.hostname 
+          }
+        });
+        return false;
+      }
+
+      this.eventLogger.log({
+        type: 'network_access',
+        severity: 'low',
+        description: `Network access granted: ${url}`,
+        timestamp: new Date(),
+        details: { url, operation }
+      });
+
+      return true;
+    } catch (error) {
+      this.eventLogger.log({
+        type: 'network_access',
+        severity: 'medium',
+        description: `Network access validation failed: ${url}`,
+        timestamp: new Date(),
+        details: { 
+          url, 
+          operation, 
+          error: error instanceof Error ? error.message : String(error) 
+        }
+      });
+      return false;
+    }
   }
 
   private ensureInitialized(): void {

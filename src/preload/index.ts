@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { exposeAPI } from './api-bridge';
 
 // Import types using relative paths since path aliases don't work in preload
 interface SystemInfo {
@@ -312,7 +313,10 @@ try {
   validateAPI();
   contextBridge.exposeInMainWorld('electronAPI', electronAPI);
   console.log('PJai\'s API successfully exposed to renderer');
+  
+  // Expose new SQLite API bridge
+  exposeAPI();
 } catch (error) {
   console.error('Failed to expose API to renderer:', error);
   throw error;
-} 
+}

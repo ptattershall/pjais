@@ -1,16 +1,16 @@
 import { loggers } from '../utils/logger';
 
 // Service token types
-export type ServiceToken<T = unknown> = string | symbol | (new (...args: unknown[]) => T);
+export type ServiceToken<T = any> = string | symbol | (new (...args: any[]) => T);
 
 // Service scope types
 export type ServiceScope = 'singleton' | 'transient' | 'scoped';
 
 // Service definition interface
-export interface ServiceDefinition<T = unknown> {
+export interface ServiceDefinition<T = any> {
   token: ServiceToken<T>;
-  factory: (...args: unknown[]) => T | Promise<T>;
-  dependencies?: ServiceToken[];
+  factory: (...args: any[]) => T | Promise<T>;
+  dependencies?: ServiceToken<any>[];
   scope?: ServiceScope;
   initialized?: boolean;
 }
@@ -31,16 +31,18 @@ export class ServiceRegistry {
     });
     
     loggers.service.debug('Service registered', { 
-      token: definition.token.toString(),
-      scope: definition.scope 
+      metadata: { 
+        token: definition.token.toString(),
+        scope: definition.scope 
+      }
     });
   }
 
   // Register a singleton service
   public registerSingleton<T>(
     token: ServiceToken<T>,
-    factory: (...args: unknown[]) => T | Promise<T>,
-    dependencies: ServiceToken[] = []
+    factory: (...args: any[]) => T | Promise<T>,
+    dependencies: ServiceToken<any>[] = []
   ): void {
     this.register({
       token,
@@ -53,8 +55,8 @@ export class ServiceRegistry {
   // Register a transient service
   public registerTransient<T>(
     token: ServiceToken<T>,
-    factory: (...args: unknown[]) => T | Promise<T>,
-    dependencies: ServiceToken[] = []
+    factory: (...args: any[]) => T | Promise<T>,
+    dependencies: ServiceToken<any>[] = []
   ): void {
     this.register({
       token,
@@ -75,7 +77,7 @@ export class ServiceRegistry {
     });
     
     loggers.service.debug('Service instance registered', { 
-      token: token.toString() 
+      metadata: { token: token.toString() }
     });
   }
 
@@ -91,7 +93,7 @@ export class ServiceRegistry {
 
     // Check if instance already exists for singletons
     if (this.instances.has(token)) {
-      return this.instances.get(token);
+      return this.instances.get(token) as T;
     }
 
     const definition = this.services.get(token);
@@ -101,7 +103,7 @@ export class ServiceRegistry {
 
     // Handle different scopes
     if (definition.scope === 'singleton' && this.instances.has(token)) {
-      return this.instances.get(token);
+      return this.instances.get(token) as T;
     }
 
     // Add to resolution stack
@@ -126,11 +128,13 @@ export class ServiceRegistry {
       definition.initialized = true;
 
       loggers.service.debug('Service resolved', { 
-        token: token.toString(),
-        scope: definition.scope 
+        metadata: { 
+          token: token.toString(),
+          scope: definition.scope 
+        }
       });
 
-      return instance;
+      return instance as T;
     } finally {
       // Remove from resolution stack
       this.resolutionStack.delete(token);
@@ -147,7 +151,7 @@ export class ServiceRegistry {
     const startTime = Date.now();
 
     loggers.service.info('Initializing all services', { 
-      serviceCount: serviceTokens.length 
+      metadata: { serviceCount: serviceTokens.length }
     });
 
     try {
@@ -161,7 +165,7 @@ export class ServiceRegistry {
       
       loggers.service.info('All services initialized successfully', { 
         duration,
-        serviceCount: serviceTokens.length 
+        metadata: { serviceCount: serviceTokens.length }
       });
     } catch (error) {
       loggers.service.error('Failed to initialize services', {}, error as Error);
@@ -253,14 +257,14 @@ export const ServiceTokens = {
 export const serviceRegistry = new ServiceRegistry();
 
 // Decorator for injectable services
-export function Injectable<T extends new (...args: unknown[]) => unknown>(
-  token: ServiceToken,
-  dependencies: ServiceToken[] = []
+export function Injectable<T extends new (...args: any[]) => any>(
+  token: ServiceToken<any>,
+  dependencies: ServiceToken<any>[] = []
 ) {
-  return function(constructor: T) {
+  return function(constructor: T): T {
     serviceRegistry.registerSingleton(
       token,
-      (...deps) => new constructor(...deps),
+      (...deps: any[]) => new constructor(...deps),
       dependencies
     );
     return constructor;
@@ -269,10 +273,14 @@ export function Injectable<T extends new (...args: unknown[]) => unknown>(
 
 // Decorator for service method instrumentation
 export function Instrument(operationName: string) {
-  return function(target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
-    const originalMethod = descriptor.value;
+  return function(target: any, propertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
+    if (typeof descriptor.value !== 'function') {
+      throw new Error('Instrument decorator can only be applied to methods');
+    }
     
-    descriptor.value = async function(...args: unknown[]) {
+    const originalMethod = descriptor.value as (...args: any[]) => any;
+    
+    descriptor.value = async function(this: any, ...args: any[]): Promise<any> {
       const startTime = Date.now();
       let success = true;
       
@@ -288,13 +296,18 @@ export function Instrument(operationName: string) {
         // Record operation metrics if health monitor is available
         if (serviceRegistry.has(ServiceTokens.HEALTH_MONITOR)) {
           serviceRegistry.resolve(ServiceTokens.HEALTH_MONITOR).then(monitor => {
-            monitor.recordOperation(operationName, duration, success);
+            // Type-safe call to health monitor with recordOperation method
+            if (monitor && typeof monitor === 'object' && 'recordOperation' in monitor) {
+              (monitor as any).recordOperation(operationName, duration, success);
+            }
           }).catch(() => {
             // Ignore health monitor errors
           });
         }
       }
     };
+    
+    return descriptor;
   };
 }
 

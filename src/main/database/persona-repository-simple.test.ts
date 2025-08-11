@@ -356,10 +356,10 @@ describe('PersonaRepository - Basic Tests', () => {
     it('should validate personality traits structure', () => {
       const persona = createTestPersonaData()
       
-      expect(persona.personality.traits).toBeInstanceOf(Array)
-      expect(persona.personality.traits[0]).toHaveProperty('name')
-      expect(persona.personality.traits[0]).toHaveProperty('value')
-      expect(persona.personality.traits[0]).toHaveProperty('category')
+      expect(persona.personality?.traits).toBeInstanceOf(Array)
+      expect(persona.personality?.traits[0]).toHaveProperty('name')
+      expect(persona.personality?.traits[0]).toHaveProperty('value')
+      expect(persona.personality?.traits[0]).toHaveProperty('category')
     })
 
     it('should validate memory configuration structure', () => {

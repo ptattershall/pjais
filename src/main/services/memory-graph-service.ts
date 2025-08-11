@@ -650,7 +650,7 @@ export class MemoryGraphService {
     // Boost confidence if memories have overlapping tags
     const tags1 = new Set(memory1.tags || []);
     const tags2 = new Set(memory2.tags || []);
-    const commonTags = [...tags1].filter(tag => tags2.has(tag));
+    const commonTags = Array.from(tags1).filter(tag => tags2.has(tag));
     
     if (commonTags.length > 0) {
       confidence = Math.min(1, confidence + (commonTags.length * 0.05));

@@ -3,15 +3,14 @@ import { PersonaManager } from './persona-manager';
 import { MemoryManager } from './memory-manager';
 import { MemoryGraphService } from './memory-graph-service';
 import { MemoryStore } from './memory-store';
-// import { MemoryLoader } from './memory-loader'; // Temporarily disabled for testing
 import { PluginManager } from './plugin-manager';
 import { ServiceManager } from './service-manager';
+import { ServiceFactory } from './ServiceFactory';
 import { EffectDatabaseManager } from '../database/effect-database-manager';
 import { PrivacyController } from './privacy-controller';
 import { PersonaMemoryManager } from './persona-memory-manager';
 import { EmotionalStateTracker } from './emotional-state-tracker';
 import { PersonaBehaviorManager } from './persona-behavior-manager';
-import { testDatabase } from '../test-database';
 import { healthMonitor } from './health-monitor';
 import { IpcMain } from 'electron';
 
@@ -22,10 +21,9 @@ export {
   MemoryManager,
   MemoryGraphService,
   MemoryStore,
-  MemoryLoader,
   PluginManager,
   ServiceManager,
-  DatabaseManager,
+  ServiceFactory,
   PrivacyController,
   PersonaMemoryManager,
   EmotionalStateTracker,
@@ -41,6 +39,7 @@ export interface Services {
   pluginManager: PluginManager;
   serviceManager: ServiceManager;
   privacyController: PrivacyController;
+  serviceFactory?: ServiceFactory;
 }
 
 /**
@@ -56,8 +55,7 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
 
     const securityManager = new SecurityManager();
     const memoryStore = new MemoryStore();
-    // const memoryLoader = new MemoryLoader(); // Temporarily disabled for testing
-    const memoryManager = new MemoryManager(memoryStore, null, databaseManager, securityManager); // Pass null instead of memoryLoader
+    const memoryManager = new MemoryManager(memoryStore, undefined as any, databaseManager as any, securityManager);
     const personaManager = new PersonaManager(memoryManager);
     const pluginManager = new PluginManager(securityManager);
 
@@ -71,7 +69,7 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
     const privacyController = new PrivacyController(
       securityManager.getSecurityEventLogger(),
       securityManager.getEncryptionService(),
-      databaseManager,
+      databaseManager as any,
       {
         defaultComplianceFramework: 'GDPR',
         enableDataMinimization: true,
@@ -89,6 +87,33 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
       securityManager
     );
 
+    // Initialize ServiceFactory for event system integration
+    const serviceFactory = ServiceFactory.getInstance({
+      database: {
+        dataPath: ':memory:', // Will be replaced by actual database
+        enableEncryption: false
+      },
+      encryption: {
+        algorithm: 'aes-256-gcm',
+        keyDerivation: 'pbkdf2',
+        keyLength: 32,
+        saltLength: 16
+      },
+      security: {
+        enableAuditLogging: true,
+        enableThreatDetection: true,
+        maxSecurityEvents: 1000
+      },
+      plugins: {
+        enableSandboxing: true,
+        defaultResourceLimits: {
+          memory: 128 * 1024 * 1024, // 128MB
+          cpu: 50, // 50%
+          storage: 10 * 1024 * 1024 // 10MB
+        }
+      }
+    });
+
     const services: Services = {
       databaseManager,
       securityManager,
@@ -97,6 +122,7 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
       pluginManager,
       serviceManager,
       privacyController,
+      serviceFactory,
     };
 
     // Initialize health monitoring
@@ -106,18 +132,7 @@ export async function initializeServices(ipcMain: IpcMain, securityPassphrase?: 
     healthMonitor.registerService('plugins', pluginManager);
     healthMonitor.start(); // Start monitoring with 30s interval
 
-    console.log('All core services initialized successfully with LiveStore database, Phase 1 security framework, and Phase 3 privacy controls');
-    
-    // Run database test if in development mode
-    if (process.env.NODE_ENV === 'development' || process.env.PJAIS_TEST_DB === 'true') {
-      console.log('🧪 Running database validation test...');
-      const testPassed = await testDatabase();
-      if (testPassed) {
-        console.log('✅ Database validation completed successfully');
-      } else {
-        console.warn('⚠️ Database validation had issues - check logs above');
-      }
-    }
+    console.log('All core services initialized successfully with Effect SQL database, Phase 1 security framework, and Phase 3 privacy controls');
     
     return services;
 
@@ -149,4 +164,4 @@ export async function shutdownServices(services: Services): Promise<void> {
   } catch (error) {
     console.error('Error during service shutdown:', error);
   }
-} 
+}

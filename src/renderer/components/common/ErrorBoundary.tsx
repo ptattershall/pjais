@@ -63,7 +63,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    const errorId = `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const errorId = `error-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     return {
       hasError: true,
       error,
@@ -78,8 +78,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // Log error details
     const errorDetails: ErrorDetails = {
       message: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
+      stack: error.stack ?? undefined,
+      componentStack: errorInfo.componentStack ?? undefined,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
       url: window.location.href,
@@ -94,8 +94,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     // Send error to IPC if available
-    if (window.electronAPI?.system?.logError) {
-      window.electronAPI.system.logError({
+    if (window.electronAPI?.system && typeof (window.electronAPI.system as any).logError === 'function') {
+      (window.electronAPI.system as any).logError({
         id: this.state.errorId,
         error: errorDetails,
         context: this.props.context || 'Unknown',
@@ -124,8 +124,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   handleReload = () => {
-    if (window.electronAPI?.system?.reload) {
-      window.electronAPI.system.reload();
+    if (window.electronAPI?.system && typeof (window.electronAPI.system as any).reload === 'function') {
+      (window.electronAPI.system as any).reload();
     } else {
       window.location.reload();
     }
@@ -150,8 +150,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     navigator.clipboard.writeText(JSON.stringify(errorReport, null, 2));
     
     // Show notification if available
-    if (window.electronAPI?.system?.showNotification) {
-      window.electronAPI.system.showNotification({
+    if (window.electronAPI?.system && typeof (window.electronAPI.system as any).showNotification === 'function') {
+      (window.electronAPI.system as any).showNotification({
         title: 'Error Report Copied',
         body: 'Error details have been copied to clipboard',
         type: 'info',
@@ -345,7 +345,7 @@ export function useErrorHandler() {
   const reportError = React.useCallback((error: Error, context?: string) => {
     const errorDetails: ErrorDetails = {
       message: error.message,
-      stack: error.stack,
+      stack: error.stack ?? undefined,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
       url: window.location.href,
@@ -354,9 +354,9 @@ export function useErrorHandler() {
 
     console.error('Manual error report:', errorDetails);
     
-    if (window.electronAPI?.system?.logError) {
-      window.electronAPI.system.logError({
-        id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    if (window.electronAPI?.system && typeof (window.electronAPI.system as any).logError === 'function') {
+      (window.electronAPI.system as any).logError({
+        id: `manual-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         error: errorDetails,
         context: context || 'Manual Report',
       });

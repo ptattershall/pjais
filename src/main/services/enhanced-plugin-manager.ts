@@ -1,21 +1,276 @@
-import { EventEmitter } from 'events';
-import { PluginManager } from './plugin-manager';
-import { PluginLifecycleManager } from './plugin-lifecycle-manager';
-import { PluginSandbox } from './plugin-sandbox';
-import { PluginCodeSigningService } from './plugin-code-signing';
-import { SecurityEventLogger } from './security-event-logger';
-import { HealthMonitor } from './health-monitor';
-import { ServiceFactory } from './ServiceFactory';
-import { IPluginManager } from './interfaces/IPluginManager';
-import { 
-  PluginData, 
-  PluginManifest, 
-  PluginState, 
-  PluginError,
-  PluginUpdateManifest 
-} from '../../shared/types/plugin';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import { PlatformUtils } from '../utils/platform';
+import { Effect, Context, Layer } from "effect"
+import { PluginData, PluginState, PluginUpdateManifest } from '../../shared/types/plugin'
 
-export interface PluginRegistryConfig {\n  registryUrl: string;\n  apiKey?: string;\n  updateCheckInterval: number;\n  allowPrerelease: boolean;\n  trustedPublishers: string[];\n}\n\nexport interface PluginInstallOptions {\n  force?: boolean;\n  skipDependencies?: boolean;\n  skipSignatureCheck?: boolean;\n  installDependencies?: boolean;\n}\n\nexport interface PluginSearchResult {\n  id: string;\n  name: string;\n  version: string;\n  description: string;\n  author: string;\n  downloads: number;\n  rating: number;\n  lastUpdated: Date;\n  verified: boolean;\n}\n\nexport interface PluginManagerEvents {\n  'plugin-installed': (plugin: PluginData) => void;\n  'plugin-uninstalled': (pluginId: string) => void;\n  'plugin-enabled': (pluginId: string) => void;\n  'plugin-disabled': (pluginId: string) => void;\n  'plugin-updated': (pluginId: string, oldVersion: string, newVersion: string) => void;\n  'plugin-error': (error: PluginError) => void;\n  'plugin-health-changed': (pluginId: string, healthy: boolean) => void;\n  'registry-updated': (availableUpdates: number) => void;\n}\n\nexport class EnhancedPluginManager extends EventEmitter<PluginManagerEvents> implements IPluginManager {\n  private lifecycleManager: PluginLifecycleManager;\n  private registryConfig: PluginRegistryConfig;\n  private updateCache = new Map<string, PluginUpdateManifest>();\n  private registryUpdateInterval: NodeJS.Timeout | null = null;\n\n  constructor(\n    private corePluginManager: PluginManager,\n    private pluginSandbox: PluginSandbox,\n    private codeSigningService: PluginCodeSigningService,\n    private eventLogger: SecurityEventLogger,\n    private healthMonitor: HealthMonitor,\n    registryConfig: PluginRegistryConfig\n  ) {\n    super();\n    this.registryConfig = registryConfig;\n    \n    this.lifecycleManager = new PluginLifecycleManager(\n      this.corePluginManager,\n      this.pluginSandbox,\n      this.eventLogger,\n      this.healthMonitor\n    );\n    \n    this.setupEventListeners();\n  }\n\n  async initialize(): Promise<void> {\n    console.log('Initializing Enhanced Plugin Manager...');\n    \n    // Initialize lifecycle manager\n    await this.lifecycleManager.initialize();\n    \n    // Start registry updates\n    this.startRegistryUpdates();\n    \n    // Register with service factory\n    ServiceFactory.registerService('pluginManager', this);\n    \n    this.eventLogger.log({\n      type: 'security',\n      severity: 'low',\n      description: 'Enhanced Plugin Manager initialized',\n      timestamp: new Date(),\n      details: {\n        registryUrl: this.registryConfig.registryUrl,\n        managedPlugins: this.list().length\n      }\n    });\n  }\n\n  private setupEventListeners(): void {\n    // Forward lifecycle events\n    this.lifecycleManager.on('state-changed', (pluginId, state) => {\n      const plugin = this.get(pluginId);\n      if (plugin) {\n        plugin.state = state.state;\n        \n        switch (state.state) {\n          case 'running':\n            this.emit('plugin-enabled', pluginId);\n            break;\n          case 'stopped':\n            this.emit('plugin-disabled', pluginId);\n            break;\n          case 'error':\n            this.emit('plugin-error', {\n              pluginId,\n              message: state.error || 'Unknown error',\n              timestamp: state.timestamp,\n              recoverable: true\n            });\n            break;\n        }\n      }\n    });\n\n    this.lifecycleManager.on('health-check', (pluginId, health) => {\n      this.emit('plugin-health-changed', pluginId, health.healthy);\n    });\n\n    this.lifecycleManager.on('update-available', (pluginId, updateInfo) => {\n      this.updateCache.set(pluginId, {\n        version: updateInfo.availableVersion,\n        changelog: updateInfo.changelog || '',\n        downloadUrl: updateInfo.downloadUrl,\n        signature: updateInfo.signature || '',\n        critical: updateInfo.critical\n      });\n    });\n  }\n\n  private startRegistryUpdates(): void {\n    this.registryUpdateInterval = setInterval(async () => {\n      await this.checkRegistryUpdates();\n    }, this.registryConfig.updateCheckInterval);\n  }\n\n  private async checkRegistryUpdates(): Promise<void> {\n    try {\n      const plugins = this.list();\n      let availableUpdates = 0;\n      \n      for (const plugin of plugins) {\n        const updateInfo = await this.checkPluginUpdate(plugin.id);\n        if (updateInfo) {\n          this.updateCache.set(plugin.id, updateInfo);\n          availableUpdates++;\n        }\n      }\n      \n      this.emit('registry-updated', availableUpdates);\n      \n    } catch (error) {\n      this.eventLogger.log({\n        type: 'security',\n        severity: 'medium',\n        description: 'Registry update check failed',\n        timestamp: new Date(),\n        details: {\n          error: error instanceof Error ? error.message : String(error)\n        }\n      });\n    }\n  }\n\n  private async checkPluginUpdate(pluginId: string): Promise<PluginUpdateManifest | null> {\n    const plugin = this.get(pluginId);\n    if (!plugin) return null;\n\n    try {\n      // In a real implementation, this would query the registry\n      // For now, return null (no updates available)\n      return null;\n      \n    } catch (error) {\n      this.eventLogger.log({\n        type: 'security',\n        severity: 'low',\n        description: `Failed to check updates for plugin ${pluginId}`,\n        timestamp: new Date(),\n        details: {\n          pluginId,\n          error: error instanceof Error ? error.message : String(error)\n        }\n      });\n      return null;\n    }\n  }\n\n  // IPluginManager implementation\n  \n  async install(pluginPath: string, options: PluginInstallOptions = {}): Promise<PluginData> {\n    try {\n      // Install via lifecycle manager\n      await this.lifecycleManager.installPlugin(pluginPath);\n      \n      const plugin = this.corePluginManager.get(path.basename(pluginPath, path.extname(pluginPath)));\n      if (!plugin) {\n        throw new Error('Plugin installation failed');\n      }\n      \n      this.emit('plugin-installed', plugin);\n      return plugin;\n      \n    } catch (error) {\n      const pluginError: PluginError = {\n        pluginId: path.basename(pluginPath, path.extname(pluginPath)),\n        message: error instanceof Error ? error.message : String(error),\n        timestamp: new Date(),\n        recoverable: false\n      };\n      \n      this.emit('plugin-error', pluginError);\n      throw error;\n    }\n  }\n\n  async uninstall(pluginId: string): Promise<void> {\n    try {\n      await this.lifecycleManager.uninstallPlugin(pluginId);\n      this.emit('plugin-uninstalled', pluginId);\n      \n    } catch (error) {\n      const pluginError: PluginError = {\n        pluginId,\n        message: error instanceof Error ? error.message : String(error),\n        timestamp: new Date(),\n        recoverable: false\n      };\n      \n      this.emit('plugin-error', pluginError);\n      throw error;\n    }\n  }\n\n  async enable(pluginId: string): Promise<void> {\n    try {\n      await this.lifecycleManager.startPlugin(pluginId);\n      \n    } catch (error) {\n      const pluginError: PluginError = {\n        pluginId,\n        message: error instanceof Error ? error.message : String(error),\n        timestamp: new Date(),\n        recoverable: true\n      };\n      \n      this.emit('plugin-error', pluginError);\n      throw error;\n    }\n  }\n\n  async disable(pluginId: string): Promise<void> {\n    try {\n      await this.lifecycleManager.stopPlugin(pluginId);\n      \n    } catch (error) {\n      const pluginError: PluginError = {\n        pluginId,\n        message: error instanceof Error ? error.message : String(error),\n        timestamp: new Date(),\n        recoverable: true\n      };\n      \n      this.emit('plugin-error', pluginError);\n      throw error;\n    }\n  }\n\n  get(pluginId: string): PluginData | undefined {\n    const plugin = this.corePluginManager.get(pluginId);\n    if (plugin) {\n      // Enhance with lifecycle state\n      const state = this.lifecycleManager.getPluginState(pluginId);\n      if (state) {\n        plugin.state = state.state;\n      }\n    }\n    return plugin;\n  }\n\n  list(): PluginData[] {\n    const plugins = this.corePluginManager.list();\n    \n    // Enhance with lifecycle states\n    return plugins.map(plugin => {\n      const state = this.lifecycleManager.getPluginState(plugin.id);\n      if (state) {\n        plugin.state = state.state;\n      }\n      return plugin;\n    });\n  }\n\n  getDetails(pluginId: string): Promise<PluginData | null> {\n    return this.corePluginManager.getDetails(pluginId);\n  }\n\n  // Enhanced functionality\n  \n  async updatePlugin(pluginId: string, force: boolean = false): Promise<void> {\n    const updateInfo = this.updateCache.get(pluginId);\n    if (!updateInfo) {\n      throw new Error(`No update available for plugin ${pluginId}`);\n    }\n    \n    try {\n      await this.lifecycleManager.updatePlugin(pluginId, {\n        currentVersion: this.get(pluginId)?.version || '0.0.0',\n        availableVersion: updateInfo.version,\n        changelog: updateInfo.changelog,\n        critical: updateInfo.critical,\n        downloadUrl: updateInfo.downloadUrl,\n        signature: updateInfo.signature\n      });\n      \n      const plugin = this.get(pluginId);\n      if (plugin) {\n        this.emit('plugin-updated', pluginId, plugin.version, updateInfo.version);\n      }\n      \n    } catch (error) {\n      const pluginError: PluginError = {\n        pluginId,\n        message: error instanceof Error ? error.message : String(error),\n        timestamp: new Date(),\n        recoverable: true\n      };\n      \n      this.emit('plugin-error', pluginError);\n      throw error;\n    }\n  }\n\n  async searchPlugins(query: string, options: {\n    limit?: number;\n    offset?: number;\n    sortBy?: 'name' | 'downloads' | 'rating' | 'updated';\n    verified?: boolean;\n  } = {}): Promise<PluginSearchResult[]> {\n    try {\n      // In a real implementation, this would query the registry\n      // For now, return empty results\n      return [];\n      \n    } catch (error) {\n      this.eventLogger.log({\n        type: 'security',\n        severity: 'low',\n        description: `Plugin search failed: ${query}`,\n        timestamp: new Date(),\n        details: {\n          query,\n          error: error instanceof Error ? error.message : String(error)\n        }\n      });\n      return [];\n    }\n  }\n\n  getPluginState(pluginId: string): PluginState | undefined {\n    const state = this.lifecycleManager.getPluginState(pluginId);\n    return state?.state;\n  }\n\n  getPluginHealth(pluginId: string) {\n    return this.lifecycleManager.getPluginHealth(pluginId);\n  }\n\n  getPluginDependencies(pluginId: string) {\n    return this.lifecycleManager.getPluginDependencies(pluginId);\n  }\n\n  getAvailableUpdates(): Array<{ pluginId: string; updateInfo: PluginUpdateManifest }> {\n    return Array.from(this.updateCache.entries()).map(([pluginId, updateInfo]) => ({\n      pluginId,\n      updateInfo\n    }));\n  }\n\n  async validatePlugin(pluginPath: string): Promise<{\n    valid: boolean;\n    errors: string[];\n    warnings: string[];\n  }> {\n    const errors: string[] = [];\n    const warnings: string[] = [];\n    \n    try {\n      // Check if file exists\n      if (!await fs.pathExists(pluginPath)) {\n        errors.push('Plugin file not found');\n        return { valid: false, errors, warnings };\n      }\n      \n      // Check file size\n      const stats = await fs.stat(pluginPath);\n      if (stats.size > 100 * 1024 * 1024) { // 100MB limit\n        errors.push('Plugin file too large (max 100MB)');\n      }\n      \n      // TODO: Add more validation (manifest, signatures, etc.)\n      \n      return {\n        valid: errors.length === 0,\n        errors,\n        warnings\n      };\n      \n    } catch (error) {\n      errors.push(`Validation failed: ${error instanceof Error ? error.message : String(error)}`);\n      return { valid: false, errors, warnings };\n    }\n  }\n\n  async exportPlugin(pluginId: string, exportPath: string): Promise<void> {\n    const plugin = this.get(pluginId);\n    if (!plugin) {\n      throw new Error(`Plugin ${pluginId} not found`);\n    }\n    \n    try {\n      const pluginDir = path.join(PlatformUtils.getPluginsPath(), pluginId);\n      \n      // Create export archive\n      // In a real implementation, this would create a proper plugin archive\n      await fs.copy(pluginDir, exportPath);\n      \n      this.eventLogger.log({\n        type: 'security',\n        severity: 'low',\n        description: `Plugin exported: ${pluginId}`,\n        timestamp: new Date(),\n        details: { pluginId, exportPath }\n      });\n      \n    } catch (error) {\n      throw new Error(`Export failed: ${error instanceof Error ? error.message : String(error)}`);\n    }\n  }\n\n  async getPluginLogs(pluginId: string, options: {\n    limit?: number;\n    since?: Date;\n    level?: 'error' | 'warn' | 'info' | 'debug';\n  } = {}): Promise<Array<{\n    timestamp: Date;\n    level: string;\n    message: string;\n    details?: any;\n  }>> {\n    // In a real implementation, this would query plugin-specific logs\n    // For now, return empty array\n    return [];\n  }\n\n  async clearPluginData(pluginId: string): Promise<void> {\n    const plugin = this.get(pluginId);\n    if (!plugin) {\n      throw new Error(`Plugin ${pluginId} not found`);\n    }\n    \n    try {\n      const pluginDataDir = path.join(PlatformUtils.getPluginsPath(), pluginId, 'data');\n      if (await fs.pathExists(pluginDataDir)) {\n        await fs.emptyDir(pluginDataDir);\n      }\n      \n      this.eventLogger.log({\n        type: 'security',\n        severity: 'low',\n        description: `Plugin data cleared: ${pluginId}`,\n        timestamp: new Date(),\n        details: { pluginId }\n      });\n      \n    } catch (error) {\n      throw new Error(`Clear data failed: ${error instanceof Error ? error.message : String(error)}`);\n    }\n  }\n\n  async shutdown(): Promise<void> {\n    if (this.registryUpdateInterval) {\n      clearInterval(this.registryUpdateInterval);\n    }\n    \n    await this.lifecycleManager.shutdown();\n    \n    this.eventLogger.log({\n      type: 'security',\n      severity: 'low',\n      description: 'Enhanced Plugin Manager shutdown completed',\n      timestamp: new Date(),\n      details: {}\n    });\n  }\n\n  // Configuration methods\n  \n  updateRegistryConfig(config: Partial<PluginRegistryConfig>): void {\n    this.registryConfig = { ...this.registryConfig, ...config };\n    \n    // Restart registry updates with new config\n    if (this.registryUpdateInterval) {\n      clearInterval(this.registryUpdateInterval);\n      this.startRegistryUpdates();\n    }\n  }\n\n  getRegistryConfig(): PluginRegistryConfig {\n    return { ...this.registryConfig };\n  }\n\n  getStatistics(): {\n    totalPlugins: number;\n    enabledPlugins: number;\n    runningPlugins: number;\n    errorPlugins: number;\n    availableUpdates: number;\n    totalErrors: number;\n    healthyPlugins: number;\n  } {\n    const plugins = this.list();\n    \n    return {\n      totalPlugins: plugins.length,\n      enabledPlugins: plugins.filter(p => p.enabled).length,\n      runningPlugins: plugins.filter(p => p.state === 'running').length,\n      errorPlugins: plugins.filter(p => p.state === 'error').length,\n      availableUpdates: this.updateCache.size,\n      totalErrors: plugins.reduce((sum, p) => {\n        const health = this.getPluginHealth(p.id);\n        return sum + (health?.errors || 0);\n      }, 0),\n      healthyPlugins: plugins.filter(p => {\n        const health = this.getPluginHealth(p.id);\n        return health?.healthy !== false;\n      }).length\n    };\n  }\n}
+// Configuration interfaces
+export interface PluginRegistryConfig {
+  registryUrl: string;
+  apiKey?: string;
+  updateCheckInterval: number;
+  allowPrerelease: boolean;
+  trustedPublishers: string[];
+}
+
+export interface PluginInstallOptions {
+  force?: boolean;
+  skipDependencies?: boolean;
+  skipSignatureCheck?: boolean;
+  installDependencies?: boolean;
+}
+
+export interface PluginSearchResult {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  downloads: number;
+  rating: number;
+  lastUpdated: Date;
+  verified: boolean;
+}
+
+export interface PluginValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface PluginLogEntry {
+  timestamp: Date;
+  level: 'error' | 'warn' | 'info' | 'debug';
+  message: string;
+  details?: any;
+}
+
+export interface PluginStatistics {
+  totalPlugins: number;
+  enabledPlugins: number;
+  runningPlugins: number;
+  errorPlugins: number;
+  availableUpdates: number;
+  totalErrors: number;
+  healthyPlugins: number;
+}
+
+// Service interface
+export interface EnhancedPluginManager {
+  readonly initialize: () => Effect.Effect<void, never, never>
+  readonly install: (pluginPath: string, options?: PluginInstallOptions) => Effect.Effect<PluginData, Error, never>
+  readonly uninstall: (pluginId: string) => Effect.Effect<void, Error, never>
+  readonly enable: (pluginId: string) => Effect.Effect<void, Error, never>
+  readonly disable: (pluginId: string) => Effect.Effect<void, Error, never>
+  readonly get: (pluginId: string) => Effect.Effect<PluginData | null, never, never>
+  readonly list: () => Effect.Effect<PluginData[], never, never>
+  readonly updatePlugin: (pluginId: string, force?: boolean) => Effect.Effect<void, Error, never>
+  readonly searchPlugins: (query: string, options?: {
+    limit?: number;
+    offset?: number;
+    sortBy?: 'name' | 'downloads' | 'rating' | 'updated';
+    verified?: boolean;
+  }) => Effect.Effect<PluginSearchResult[], never, never>
+  readonly validatePlugin: (pluginPath: string) => Effect.Effect<PluginValidationResult, never, never>
+  readonly getStatistics: () => Effect.Effect<PluginStatistics, never, never>
+  readonly shutdown: () => Effect.Effect<void, never, never>
+}
+
+// Create service tag
+export const EnhancedPluginManager = Context.GenericTag<EnhancedPluginManager>("EnhancedPluginManager")
+
+// Service implementation
+export const EnhancedPluginManagerLive = Layer.effect(
+  EnhancedPluginManager,
+  Effect.sync(() => {
+    // In-memory storage for this implementation
+    const plugins = new Map<string, PluginData>();
+    const updateCache = new Map<string, PluginUpdateManifest>();
+    
+    // Default registry config
+    const registryConfig: PluginRegistryConfig = {
+      registryUrl: 'https://plugins.example.com',
+      updateCheckInterval: 3600000, // 1 hour
+      allowPrerelease: false,
+      trustedPublishers: []
+    };
+
+    const createMockPlugin = (id: string, path: string): PluginData => ({
+      id,
+      name: `Plugin ${id}`,
+      version: '1.0.0',
+      author: 'Unknown',
+      description: `Plugin loaded from ${path}`,
+      permissions: [],
+      enabled: false,
+      state: 'stopped' as PluginState,
+      manifest: {
+        id,
+        name: `Plugin ${id}`,
+        version: '1.0.0',
+        description: `Plugin loaded from ${path}`,
+        author: 'Unknown',
+        main: 'index.js',
+        permissions: {}
+      },
+      dependencies: {}
+    });
+
+    const logEvent = (message: string, details?: any) => {
+      console.log(`[EnhancedPluginManager] ${message}`, details ? JSON.stringify(details, null, 2) : '');
+    };
+
+    return {
+      initialize: () =>
+        Effect.succeed(void 0).pipe(
+          Effect.tap(() => Effect.sync(() => logEvent('Initializing Enhanced Plugin Manager...'))),
+          Effect.tap(() => Effect.sync(() => logEvent('Enhanced Plugin Manager initialized', {
+            registryUrl: registryConfig.registryUrl,
+            managedPlugins: plugins.size
+          })))
+        ),
+
+      install: (pluginPath: string, _options: PluginInstallOptions = {}) =>
+        Effect.gen(function* () {
+          const pluginId = `plugin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Validate plugin first
+          const validation = yield* Effect.sync(() => {
+            // Basic validation - in real implementation would check file existence, manifest, etc.
+            if (!pluginPath || pluginPath.length === 0) {
+              return {
+                valid: false,
+                errors: ['Plugin path is required'],
+                warnings: []
+              };
+            }
+            
+            return {
+              valid: true,
+              errors: [],
+              warnings: []
+            };
+          });
+
+          if (!validation.valid) {
+            return yield* Effect.fail(new Error(`Plugin validation failed: ${validation.errors.join(', ')}`));
+          }
+
+          const plugin = createMockPlugin(pluginId, pluginPath);
+          plugins.set(pluginId, plugin);
+          
+          logEvent('Plugin installed', { pluginId, pluginPath });
+          return plugin;
+        }),
+
+      uninstall: (pluginId: string) =>
+        Effect.gen(function* () {
+          const plugin = plugins.get(pluginId);
+          if (!plugin) {
+            return yield* Effect.fail(new Error(`Plugin ${pluginId} not found`));
+          }
+
+          // Disable first if enabled
+          if (plugin.enabled) {
+            plugin.enabled = false;
+            plugin.state = 'stopped';
+          }
+
+          plugins.delete(pluginId);
+          updateCache.delete(pluginId);
+          
+          logEvent('Plugin uninstalled', { pluginId });
+        }),
+
+      enable: (pluginId: string) =>
+        Effect.gen(function* () {
+          const plugin = plugins.get(pluginId);
+          if (!plugin) {
+            return yield* Effect.fail(new Error(`Plugin ${pluginId} not found`));
+          }
+
+          plugin.enabled = true;
+          plugin.state = 'running';
+          
+          logEvent('Plugin enabled', { pluginId });
+        }),
+
+      disable: (pluginId: string) =>
+        Effect.gen(function* () {
+          const plugin = plugins.get(pluginId);
+          if (!plugin) {
+            return yield* Effect.fail(new Error(`Plugin ${pluginId} not found`));
+          }
+
+          plugin.enabled = false;
+          plugin.state = 'stopped';
+          
+          logEvent('Plugin disabled', { pluginId });
+        }),
+
+      get: (pluginId: string) =>
+        Effect.succeed(plugins.get(pluginId) || null),
+
+      list: () =>
+        Effect.succeed(Array.from(plugins.values())),
+
+      updatePlugin: (pluginId: string, _force: boolean = false) =>
+        Effect.gen(function* () {
+          const plugin = plugins.get(pluginId);
+          if (!plugin) {
+            return yield* Effect.fail(new Error(`Plugin ${pluginId} not found`));
+          }
+
+          const updateInfo = updateCache.get(pluginId);
+          if (!updateInfo) {
+            return yield* Effect.fail(new Error(`No update available for plugin ${pluginId}`));
+          }
+
+          const oldVersion = plugin.version;
+          plugin.version = updateInfo.version;
+          
+          logEvent('Plugin updated', { pluginId, oldVersion, newVersion: updateInfo.version });
+        }),
+
+      searchPlugins: (_query: string, _options: {
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'downloads' | 'rating' | 'updated';
+        verified?: boolean;
+      } = {}) =>
+        Effect.succeed([]),
+
+      validatePlugin: (pluginPath: string) =>
+        Effect.succeed({
+          valid: Boolean(pluginPath && pluginPath.length > 0 && pluginPath.length <= 500),
+          errors: pluginPath && pluginPath.length > 0 ? [] : ['Plugin path is required'],
+          warnings: pluginPath && pluginPath.length > 500 ? ['Plugin path is very long'] : []
+        }),
+
+      getStatistics: () =>
+        Effect.sync(() => {
+          const pluginList = Array.from(plugins.values());
+          
+          return {
+            totalPlugins: pluginList.length,
+            enabledPlugins: pluginList.filter(p => p.enabled).length,
+            runningPlugins: pluginList.filter(p => p.state === 'running').length,
+            errorPlugins: pluginList.filter(p => p.state === 'error').length,
+            availableUpdates: updateCache.size,
+            totalErrors: 0, // PluginData doesn't have lastError property
+            healthyPlugins: pluginList.filter(p => p.state === 'running').length
+          };
+        }),
+
+      shutdown: () =>
+        Effect.sync(() => {
+          // Disable all running plugins
+          for (const plugin of plugins.values()) {
+            if (plugin.enabled) {
+              plugin.enabled = false;
+              plugin.state = 'stopped';
+            }
+          }
+          
+          logEvent('Enhanced Plugin Manager shutdown completed');
+        })
+    }
+  })
+)

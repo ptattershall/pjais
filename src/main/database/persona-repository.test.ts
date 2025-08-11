@@ -1,7 +1,24 @@
-import { describe, it, beforeEach, afterEach, vi } from 'vitest'
-import { expect } from 'vitest'
-import { PersonaRepository } from './persona-repository'
+import { describe, vi } from 'vitest'
+import { it as effectIt, expect } from '@effect/vitest'
+import { Effect, Layer, Exit } from 'effect'
+import { SqlClient } from '@effect/sql'
+import { SqliteClient } from '@effect/sql-sqlite-node'
+import { PersonaRepository, PersonaRepositoryLive } from './persona-repository'
+import { DatabaseServiceLayer } from './database-service'
 import { PersonaData } from '../../shared/types/persona'
+
+// Test database layer with in-memory SQLite
+const TestSqliteLive = SqliteClient.layer({
+  filename: ':memory:',
+  transformQueryNames: (str) => str.toLowerCase()
+})
+
+// Combined test layer
+const TestLive = Layer.mergeAll(
+  TestSqliteLive,
+  DatabaseServiceLayer,
+  PersonaRepositoryLive
+)
 
 // Mock the PersonaRepository implementation
 vi.mock('./persona-repository', () => ({
@@ -133,9 +150,9 @@ describe('PersonaRepository', () => {
         expect(created).not.toBeNull()
         expect(created?.name).toBe('Creative Assistant')
         expect(created?.description).toBe('A creative and helpful AI assistant')
-        expect(created?.personality.temperament).toBe('optimistic')
-        expect(created?.personality.communicationStyle).toBe('friendly')
-        expect(created?.personality.traits).toHaveLength(2)
+        expect(created?.personality?.temperament).toBe('optimistic')
+        expect(created?.personality?.communicationStyle).toBe('friendly')
+        expect(created?.personality?.traits).toHaveLength(2)
         expect(created?.isActive).toBe(false)
       })
       .pipe(Effect.provide(TestLive))
@@ -211,8 +228,8 @@ describe('PersonaRepository', () => {
         const personaId = yield* repo.create(testData)
         const created = yield* repo.getById(personaId)
         
-        expect(created?.personality.traits).toHaveLength(2)
-        expect(created?.personality.traits[0].description).toBe('Loves to analyze problems')
+        expect(created?.personality?.traits).toHaveLength(2)
+        expect(created?.personality?.traits[0].description).toBe('Loves to analyze problems')
         expect(created?.memoryConfiguration.memoryCategories).toEqual(['technical', 'research', 'analysis', 'solutions'])
         expect(created?.memoryConfiguration.maxMemories).toBe(2000)
         expect(created?.memoryConfiguration.autoOptimize).toBe(false)
@@ -251,11 +268,10 @@ describe('PersonaRepository', () => {
     effectIt('should return all personas ordered by creation date', () =>
       Effect.gen(function* () {
         const repo = yield* PersonaRepository
-        
         // Create multiple personas
-        const id1 = yield* repo.create(createTestPersonaData({ name: 'Persona 1' }))
-        const id2 = yield* repo.create(createTestPersonaData({ name: 'Persona 2' }))
-        const id3 = yield* repo.create(createTestPersonaData({ name: 'Persona 3' }))
+        yield* repo.create(createTestPersonaData({ name: 'Persona 1' }))
+        yield* repo.create(createTestPersonaData({ name: 'Persona 2' }))
+        yield* repo.create(createTestPersonaData({ name: 'Persona 3' }))
         
         const allPersonas = yield* repo.getAll()
         
@@ -312,10 +328,10 @@ describe('PersonaRepository', () => {
         })
         
         const updated = yield* repo.getById(personaId)
-        expect(updated?.personality.traits).toHaveLength(1)
-        expect(updated?.personality.traits[0].name).toBe('updated')
-        expect(updated?.personality.temperament).toBe('energetic')
-        expect(updated?.personality.communicationStyle).toBe('enthusiastic')
+        expect(updated?.personality?.traits).toHaveLength(1)
+        expect(updated?.personality?.traits[0].name).toBe('updated')
+        expect(updated?.personality?.temperament).toBe('energetic')
+        expect(updated?.personality?.communicationStyle).toBe('enthusiastic')
       })
       .pipe(Effect.provide(TestLive))
     )
@@ -339,9 +355,9 @@ describe('PersonaRepository', () => {
         })
         
         const updated = yield* repo.getById(personaId)
-        expect(updated?.personality.temperament).toBe('optimistic')
+        expect(updated?.personality?.temperament).toBe('optimistic')
         // Other personality fields should remain unchanged
-        expect(updated?.personality.communicationStyle).toBe('conversational')
+        expect(updated?.personality?.communicationStyle).toBe('conversational')
       })
       .pipe(Effect.provide(TestLive))
     )
@@ -358,7 +374,7 @@ describe('PersonaRepository', () => {
         
         const after = yield* repo.getById(personaId)
         expect(after?.name).toBe('Unchanged')
-        expect(after?.updatedAt.getTime()).toBe(before?.updatedAt.getTime())
+        expect(after?.updatedAt?.getTime()).toBe(before?.updatedAt?.getTime())
       })
       .pipe(Effect.provide(TestLive))
     )
@@ -420,7 +436,7 @@ describe('PersonaRepository', () => {
         const repo = yield* PersonaRepository
         
         // Create multiple personas
-        const id1 = yield* repo.create(createTestPersonaData({ name: 'Inactive' }))
+        yield* repo.create(createTestPersonaData({ name: 'Inactive' }))
         const id2 = yield* repo.create(createTestPersonaData({ name: 'Active' }))
         
         yield* repo.activate(id2)
@@ -449,18 +465,6 @@ describe('PersonaRepository', () => {
     effectIt('should handle database connection errors gracefully', () =>
       Effect.gen(function* () {
         // Create a mock repository that fails
-        const FailingRepo = PersonaRepository.of({
-          create: () => Effect.fail(new Error('Database connection failed')),
-          update: () => Effect.fail(new Error('Database connection failed')),
-          activate: () => Effect.fail(new Error('Database connection failed')),
-          deactivate: () => Effect.fail(new Error('Database connection failed')),
-          getById: () => Effect.fail(new Error('Database connection failed')),
-          getAll: () => Effect.fail(new Error('Database connection failed')),
-          getActive: () => Effect.fail(new Error('Database connection failed'))
-        })
-
-        const TestLayerWithFailure = Layer.succeed(PersonaRepository, FailingRepo)
-        
         const repo = yield* PersonaRepository
         const result = yield* Effect.exit(repo.create(createTestPersonaData()))
         
@@ -469,7 +473,15 @@ describe('PersonaRepository', () => {
           expect(result.cause._tag).toBe('Die')
         }
       })
-      .pipe(Effect.provide(TestLayerWithFailure))
+      .pipe(Effect.provide(Layer.succeed(PersonaRepository, PersonaRepository.of({
+        create: () => Effect.fail(new Error('Database connection failed')),
+        update: () => Effect.fail(new Error('Database connection failed')),
+        activate: () => Effect.fail(new Error('Database connection failed')),
+        deactivate: () => Effect.fail(new Error('Database connection failed')),
+        getById: () => Effect.fail(new Error('Database connection failed')),
+        getAll: () => Effect.fail(new Error('Database connection failed')),
+        getActive: () => Effect.fail(new Error('Database connection failed'))
+      }))))
     )
   })
 
@@ -491,7 +503,7 @@ describe('PersonaRepository', () => {
         expect(persona).not.toBeNull()
         expect(persona?.name).toBe('Minimal Persona')
         expect(persona?.description).toBe('')
-        expect(persona?.personality.traits).toEqual([])
+        expect(persona?.personality?.traits).toEqual([])
         expect(persona?.memoryConfiguration.maxMemories).toBe(1000)
       })
       .pipe(Effect.provide(TestLive))
@@ -507,8 +519,8 @@ describe('PersonaRepository', () => {
         
         expect(persona?.createdAt).toBeInstanceOf(Date)
         expect(persona?.updatedAt).toBeInstanceOf(Date)
-        expect(persona?.createdAt.getTime()).toBeLessThanOrEqual(Date.now())
-        expect(persona?.updatedAt.getTime()).toBeLessThanOrEqual(Date.now())
+        expect(persona?.createdAt?.getTime()).toBeLessThanOrEqual(Date.now())
+        expect(persona?.updatedAt?.getTime()).toBeLessThanOrEqual(Date.now())
       })
       .pipe(Effect.provide(TestLive))
     )

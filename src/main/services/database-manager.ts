@@ -6,7 +6,7 @@ import { PersonaData } from '../../shared/types/persona'
 import { EncryptedDataManager } from './encrypted-storage-adapter'
 import { EncryptionService } from './encryption-service'
 import { SecurityEventLogger } from './security-event-logger'
-import path from 'path'
+import * as path from 'path'
 import { app } from 'electron'
 
 export interface DatabaseConfig {
@@ -112,6 +112,9 @@ export class DatabaseManager {
         memoryRetention: true,
         exportDataAllowed: true
       },
+      behaviorSettings: {},
+      version: '1.0',
+      memories: [],
       isActive: false,
       createdAt: now,
       updatedAt: now
@@ -250,12 +253,12 @@ export class DatabaseManager {
   }
 
   async updateMemoryEmbedding(memoryId: string, embedding: number[], model: string): Promise<void> {
-    this.ensureInitialized()
+    this.ensureInitialized();
     
-    const memory = this.mockMemories.find(m => m.id === memoryId)
+    const memory = this.mockMemories.find(m => m.id === memoryId);
     if (memory) {
-      (memory as any).embedding = embedding
-      (memory as any).embeddingModel = model
+      (memory as any).embedding = embedding;
+      (memory as any).embeddingModel = model;
     }
   }
 
@@ -332,4 +335,4 @@ export class DatabaseManager {
       encryptionEnabled: !!this.encryptedDataManager
     }
   }
-} 
+}

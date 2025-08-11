@@ -1,4 +1,4 @@
-import { pipeline, Pipeline, env } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
 import { SecurityEventLogger } from './security-event-logger';
 import { 
   MemoryEmbedding, 
@@ -32,7 +32,7 @@ interface EmbeddingCache {
 }
 
 export class EmbeddingService {
-  private pipeline: Pipeline | null = null;
+  private pipeline: any | null = null; // Use any to handle different pipeline types
   private eventLogger: SecurityEventLogger;
   private config: EmbeddingConfig;
   private isInitialized = false;
@@ -51,11 +51,8 @@ export class EmbeddingService {
       // Initialize the sentence transformer pipeline
       this.pipeline = await pipeline(
         'feature-extraction',
-        this.config.model,
-        { 
-          device: 'cpu', // Use CPU for compatibility
-          dtype: 'fp32'   // Use float32 for better compatibility
-        }
+        this.config.model
+        // Note: device and dtype options are not supported in current version
       );
 
       this.isInitialized = true;
@@ -164,13 +161,18 @@ export class EmbeddingService {
         normalize: true
       });
 
-      // Extract the embedding vector
+      // Extract the embedding vector with proper typing
       let embedding: number[];
-      if (Array.isArray(output.data)) {
-        embedding = Array.from(output.data);
+      if (output && typeof output === 'object' && 'data' in output) {
+        const outputData = (output as any).data;
+        if (Array.isArray(outputData)) {
+          embedding = Array.from(outputData as ArrayLike<number>);
+        } else {
+          embedding = Array.from(outputData as ArrayLike<number>);
+        }
       } else {
-        // Handle different output formats
-        embedding = Array.from(output);
+        // Handle tensor or array output
+        embedding = Array.from(output as ArrayLike<number>);
       }
 
       // Validate embedding dimensions
@@ -224,9 +226,12 @@ export class EmbeddingService {
       memoryId: memory.id!,
       embedding,
       model: this.config.model,
-      dimensions: embedding.length,
       createdAt: new Date(),
-      version: this.modelVersion
+      metadata: {
+        dimensions: embedding.length,
+        processingTime: 0, // Can be enhanced to track actual processing time
+        textLength: combinedText.length
+      }
     };
   }
 
@@ -492,4 +497,4 @@ export class EmbeddingService {
       throw new Error('EmbeddingService not initialized');
     }
   }
-} 
+}

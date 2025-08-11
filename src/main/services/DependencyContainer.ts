@@ -1,4 +1,5 @@
 import { ServiceRegistry } from './interfaces';
+import { vi } from 'vitest';
 
 export type ServiceKey = keyof ServiceRegistry;
 export type ServiceInstance<T extends ServiceKey> = ServiceRegistry[T];
@@ -141,14 +142,13 @@ export function createMockService<T extends ServiceKey>(
   mockImplementation: Partial<ServiceInstance<T>>
 ): ServiceInstance<T> {
   const mock = {
-    initialize: jest.fn().mockResolvedValue(undefined),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    isInitialized: jest.fn().mockReturnValue(true),
-    getHealthStatus: jest.fn().mockResolvedValue({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    isInitialized: vi.fn().mockReturnValue(true),
+    getHealthStatus: vi.fn().mockResolvedValue({
       status: 'healthy',
-      uptime: 1000,
-      memoryUsage: 100,
-      errors: []
+      service: key,
+      details: {}
     }),
     ...mockImplementation
   } as ServiceInstance<T>;
@@ -160,7 +160,7 @@ export function createMockService<T extends ServiceKey>(
 export function setupTestContainer(): DependencyContainer {
   const container = new DependencyContainer();
 
-  // Register mock services
+  // Register mock services without dependencies to avoid circular dependencies
   container.register({
     key: 'encryptionService',
     factory: () => createMockService('encryptionService', {}),
@@ -182,22 +182,19 @@ export function setupTestContainer(): DependencyContainer {
   container.register({
     key: 'memoryManager',
     factory: () => createMockService('memoryManager', {}),
-    singleton: true,
-    dependencies: ['databaseManager', 'securityManager']
+    singleton: true
   });
 
   container.register({
     key: 'personaManager',
     factory: () => createMockService('personaManager', {}),
-    singleton: true,
-    dependencies: ['memoryManager']
+    singleton: true
   });
 
   container.register({
     key: 'pluginManager',
     factory: () => createMockService('pluginManager', {}),
-    singleton: true,
-    dependencies: ['securityManager']
+    singleton: true
   });
 
   return container;

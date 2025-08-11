@@ -36,6 +36,7 @@ export const openExternalUrl = (services: Services) => {
         type: 'network_access',
         severity: 'high',
         description: `Blocked attempt to open non-http URL: ${url}`,
+        timestamp: new Date(),
       });
       throw new Error('For security reasons, only http and https links can be opened.');
     }

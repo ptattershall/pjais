@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ipcMain, ipcRenderer, BrowserWindow } from 'electron';
+import { ipcRenderer, BrowserWindow } from 'electron';
 import { setupTestContainer } from '../services/DependencyContainer';
 import { IMemoryManager, IPersonaManager } from '../services/interfaces';
-import { PersonaData } from '../../shared/types/persona';
-import { MemoryEntity } from '../../shared/types/memory';
 
 // Mock Electron IPC
 vi.mock('electron', () => ({
@@ -59,7 +57,7 @@ describe('IPC Integration Tests', () => {
       // Mock IPC handler for memory creation
       const mockMemoryData = {
         content: 'Test memory via IPC',
-        type: 'text',
+        type: 'text' as const,
         importance: 7,
         tags: ['ipc', 'test']
       };
@@ -79,7 +77,7 @@ describe('IPC Integration Tests', () => {
       // Create a memory first
       const memory = await memoryManager.createMemory({
         content: 'Retrievable memory',
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
 
@@ -94,18 +92,16 @@ describe('IPC Integration Tests', () => {
 
     it('should handle memory search via IPC', async () => {
       // Create test memories
-      const memories = [
-        await memoryManager.createMemory({
-          content: 'JavaScript programming tips',
-          type: 'knowledge',
-          importance: 8
-        }),
-        await memoryManager.createMemory({
-          content: 'Python data analysis',
-          type: 'knowledge',
-          importance: 7
-        })
-      ];
+      await memoryManager.createMemory({
+        content: 'JavaScript programming tips',
+        type: 'text' as const,
+        importance: 8
+      });
+      await memoryManager.createMemory({
+        content: 'Python data analysis',
+        type: 'text' as const,
+        importance: 7
+      });
 
       const searchResults = await memoryManager.searchMemories('JavaScript');
       
@@ -128,11 +124,11 @@ describe('IPC Integration Tests', () => {
       // Create a memory first
       const memory = await memoryManager.createMemory({
         content: 'Original content',
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
 
-      const updatedMemory = await memoryManager.updateMemory(memory.id, {
+      const updatedMemory = await memoryManager.updateMemory(memory.id!, {
         content: 'Updated content',
         importance: 8
       });
@@ -156,11 +152,11 @@ describe('IPC Integration Tests', () => {
       // Create a memory first
       const memory = await memoryManager.createMemory({
         content: 'Memory to delete',
-        type: 'text',
+        type: 'text' as const,
         importance: 3
       });
 
-      await memoryManager.deleteMemory(memory.id);
+      await memoryManager.deleteMemory(memory.id!);
 
       // Mock IPC handler for memory deletion
       vi.mocked(ipcRenderer.invoke).mockResolvedValue(undefined);
@@ -230,7 +226,7 @@ describe('IPC Integration Tests', () => {
         isActive: false
       });
 
-      const updatedPersona = await personaManager.update(persona.id, {
+      const updatedPersona = await personaManager.update(persona.id!, {
         description: 'Updated description',
         isActive: true
       });
@@ -257,7 +253,7 @@ describe('IPC Integration Tests', () => {
         isActive: true
       });
 
-      await personaManager.delete(persona.id);
+      await personaManager.delete(persona.id!);
 
       // Mock IPC handler for persona deletion
       vi.mocked(ipcRenderer.invoke).mockResolvedValue(undefined);
@@ -314,15 +310,9 @@ describe('IPC Integration Tests', () => {
       // Create a memory
       const memory = await memoryManager.createMemory({
         content: 'Real-time test memory',
-        type: 'text',
+        type: 'text' as const,
         importance: 6
       });
-
-      // Mock real-time update event
-      const updateEvent = {
-        type: 'memory:updated',
-        data: memory
-      };
 
       // Simulate sending update to renderer
       mockWindow.webContents.send('memory:updated', memory);
@@ -336,12 +326,6 @@ describe('IPC Integration Tests', () => {
         description: 'For real-time testing',
         isActive: true
       });
-
-      // Mock real-time update event
-      const updateEvent = {
-        type: 'persona:updated',
-        data: persona
-      };
 
       // Simulate sending update to renderer
       mockWindow.webContents.send('persona:updated', persona);
@@ -376,7 +360,7 @@ describe('IPC Integration Tests', () => {
     it('should handle validation errors in IPC', async () => {
       const invalidMemoryData = {
         content: '', // Invalid: empty content
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       };
 
@@ -407,14 +391,14 @@ describe('IPC Integration Tests', () => {
         const mockMemory = {
           id: `memory-${i}`,
           content: `Concurrent memory ${i}`,
-          type: 'text',
+          type: 'text' as const,
           importance: 5
         };
         
         vi.mocked(ipcRenderer.invoke).mockResolvedValueOnce(mockMemory);
         promises.push(ipcRenderer.invoke('memory:create', {
           content: `Concurrent memory ${i}`,
-          type: 'text',
+          type: 'text' as const,
           importance: 5
         }));
       }
@@ -430,7 +414,7 @@ describe('IPC Integration Tests', () => {
       const largeContent = 'x'.repeat(10000);
       const largeMemory = await memoryManager.createMemory({
         content: largeContent,
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
 
@@ -439,14 +423,14 @@ describe('IPC Integration Tests', () => {
       
       const result = await ipcRenderer.invoke('memory:create', {
         content: largeContent,
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
       
       expect(result.content).toHaveLength(10000);
       expect(ipcRenderer.invoke).toHaveBeenCalledWith('memory:create', {
         content: largeContent,
-        type: 'text',
+        type: 'text' as const,
         importance: 5
       });
     });

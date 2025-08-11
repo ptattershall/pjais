@@ -1,0 +1,44 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "ES2015.Iterable", "ES2015.Collection", "ES2015.Generator", "ES2015.Promise", "ES2018.AsyncIterable", "ES2017.Intl"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "downlevelIteration": true,
+    "importHelpers": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "useDefineForClassFields": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@shared/*": ["src/shared/*"],
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/*"],
+      "@preload/*": ["src/preload/*"]
+    }
+  },
+  "include": [
+    "src/main/**/*",
+    "src/shared/**/*",
+    "forge.config.ts"
+  ],
+  "exclude": [
+    "node_modules", 
+    "dist", 
+    ".vite",
+    "src/renderer/**/*",
+    "src/preload/**/*"
+  ]
+}

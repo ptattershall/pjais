@@ -18,8 +18,8 @@ const MemoryIntegrationTest = lazy(() => import('./components/MemoryIntegrationT
 
 // Simulate a lazy-loaded persistence test component
 const PersistenceTest = lazy(() => 
-  import('./components/PersonaIntegrationTest').then(module => ({
-    default: React.memo(() => {
+  import('./components/PersonaIntegrationTest').then(_module => ({
+    default: React.memo(function PersistenceTest() {
       return (
         <div>
           <Typography variant="h6">Persistence Test</Typography>
@@ -82,7 +82,7 @@ export const DashboardOverview: React.FC = () => {
           <Box>
             {/* Metrics Overview */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <MetricCard
                   title="Active Personas"
                   value={metrics.personas}
@@ -91,7 +91,7 @@ export const DashboardOverview: React.FC = () => {
                   color="primary"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <MetricCard
                   title="Stored Memories"
                   value={metrics.memories}
@@ -101,7 +101,7 @@ export const DashboardOverview: React.FC = () => {
                   progress={75}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <MetricCard
                   title="Active Plugins"
                   value={metrics.plugins}
@@ -110,7 +110,7 @@ export const DashboardOverview: React.FC = () => {
                   color="success"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <MetricCard
                   title="Security Score"
                   value={metrics.security}
@@ -125,7 +125,7 @@ export const DashboardOverview: React.FC = () => {
             {/* Secondary Grid */}
             <Grid container spacing={3}>
               {/* Left Column */}
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <SystemInfoCard />
                   <QuickActionsCard onAction={handleQuickAction} />
@@ -133,7 +133,7 @@ export const DashboardOverview: React.FC = () => {
               </Grid>
 
               {/* Right Column - Lazy-loaded integration tests */}
-              <Grid item xs={12} md={8}>
+              <Grid size={{ xs: 12, md: 8 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Typography variant="h6" gutterBottom>
                     Integration Tests

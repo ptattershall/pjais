@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, shell, crashReporter } from 'electron';
-import path, { join } from 'path';
+import { join } from 'path';
 import { setupIPCHandlers } from './ipc';
 import { initializeServices, Services } from './services';
 import { createApplicationMenu } from './menu';
@@ -8,6 +8,7 @@ import { PerformanceMonitor } from './utils/performance';
 import log from 'electron-log';
 import { configManager } from './services/config-manager';
 import { updateElectronApp } from 'update-electron-app';
+import IPCHandlers from './ipc/ipc-handlers';
 
 // These are injected by the build process and need to be declared
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
@@ -41,6 +42,7 @@ process.on('uncaughtException', (error) => {
 class PJAISHub {
   private mainWindow: BrowserWindow | null = null;
   private services: Services | null = null;
+  private ipcHandlers: IPCHandlers | null = null;
 
   constructor() {
     // Call the auto-updater
@@ -69,11 +71,47 @@ class PJAISHub {
       // Ensure directories exist
       await PlatformUtils.ensureDirectoriesExist();
 
+      // Initialize SQLite database
+      log.info('Initializing SQLite database...');
+      
+      // Run data migration first
+      const { DataMigrationManager } = await import('./database/data-migration');
+      const migrationManager = new DataMigrationManager();
+      const migrationResult = await migrationManager.migrate();
+      
+      if (migrationResult.success) {
+        if (migrationResult.migratedPersonas > 0 || migrationResult.migratedMemories > 0) {
+          log.info(`✅ Migration completed: ${migrationResult.migratedPersonas} personas, ${migrationResult.migratedMemories} memories migrated`);
+        } else {
+          log.info('📋 Migration check completed - no data to migrate or already completed');
+        }
+      } else {
+        log.error('❌ Migration failed:', migrationResult.errors);
+        // Continue anyway - better to have a working app with new DB than to fail entirely
+      }
+      
+      // Create database manager and initialize it
+      const { SqliteDatabaseManager } = await import('./database/sqlite-database-manager');
+      const databaseManager = new SqliteDatabaseManager();
+      await databaseManager.initialize();
+      
+      // Initialize new IPC handlers for SQLite
+      this.ipcHandlers = new IPCHandlers(databaseManager);
+      this.ipcHandlers.registerHandlers();
+
       // Initialize core services
       this.services = await initializeServices(ipcMain);
 
       // Setup IPC communication
       setupIPCHandlers(this.services);
+
+      // Initialize event system IPC handlers
+      const { initializeEventIpcHandlers } = await import('./ipc/event-ipc-handlers');
+      const serviceFactory = this.services.serviceFactory;
+      if (serviceFactory) {
+        initializeEventIpcHandlers(serviceFactory);
+        log.info('✅ Event IPC handlers initialized');
+      }
 
       // Create main application window
       this.createMainWindow();
@@ -122,7 +160,6 @@ class PJAISHub {
         allowRunningInsecureContent: false,
         sandbox: true,
         // Additional security settings
-        enableRemoteModule: false,
         experimentalFeatures: false
       }
     });
@@ -226,4 +263,4 @@ if (!gotTheLock) {
       pjaisHub['mainWindow'].focus();
     }
   });
-} 
+}

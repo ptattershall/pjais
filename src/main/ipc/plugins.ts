@@ -50,15 +50,20 @@ export const getPluginDetails = (pluginManager: PluginManager) => {
   return (event: any, pluginId: string) => pluginManager.getDetails(pluginId);
 };
 
-// Enhanced handlers for new plugin system
-import { EnhancedPluginManager, PluginInstallOptions } from '../services/enhanced-plugin-manager';
+// Enhanced handlers for Plugin Lifecycle Manager
+import { PluginLifecycleManager, PluginState } from '../services/plugin-lifecycle-manager';
 
-export const createEnhancedPluginHandlers = (enhancedPluginManager: EnhancedPluginManager, services: Services) => {
+export interface PluginInstallOptions {
+  force?: boolean;
+  skipValidation?: boolean;
+}
+
+export const createLifecyclePluginHandlers = (lifecycleManager: PluginLifecycleManager, services: Services) => {
   const { securityManager } = services;
 
   return {
     // Core plugin operations
-    installPluginEnhanced: async (event: any, pluginPath?: string, options: PluginInstallOptions = {}) => {
+    installPluginLifecycle: async (_event: any, pluginPath?: string, _options: PluginInstallOptions = {}) => {
       let pathToInstall = pluginPath;
 
       if (!pathToInstall) {
@@ -81,85 +86,80 @@ export const createEnhancedPluginHandlers = (enhancedPluginManager: EnhancedPlug
         }
       }
       
-      return enhancedPluginManager.install(pathToInstall, options);
+      await lifecycleManager.installPlugin(pathToInstall);
+      return lifecycleManager.getPlugin(pathToInstall.split('/').pop()?.split('.')[0] || '');
     },
 
-    uninstallPluginEnhanced: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.uninstall(pluginId);
+    uninstallPluginLifecycle: async (_event: any, pluginId: string) => {
+      await lifecycleManager.uninstallPlugin(pluginId);
+      return true;
     },
 
-    enablePluginEnhanced: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.enable(pluginId);
+    startPlugin: async (_event: any, pluginId: string) => {
+      await lifecycleManager.startPlugin(pluginId);
+      return true;
     },
 
-    disablePluginEnhanced: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.disable(pluginId);
+    stopPlugin: async (_event: any, pluginId: string) => {
+      await lifecycleManager.stopPlugin(pluginId);
+      return true;
     },
 
-    listPluginsEnhanced: async (event: any) => {
-      return enhancedPluginManager.list();
+    listPluginsLifecycle: async (_event: any) => {
+      return lifecycleManager.getAllPlugins();
     },
 
-    getPluginDetailsEnhanced: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.getDetails(pluginId);
+    getPluginLifecycle: async (_event: any, pluginId: string) => {
+      return lifecycleManager.getPlugin(pluginId);
     },
 
-    getPluginEnhanced: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.get(pluginId);
+    // Advanced lifecycle features
+    updatePluginLifecycle: async (_event: any, pluginId: string, force: boolean = false) => {
+      await lifecycleManager.updatePlugin(pluginId, force);
+      return true;
     },
 
-    // Enhanced features
-    updatePlugin: async (event: any, pluginId: string, force: boolean = false) => {
-      return enhancedPluginManager.updatePlugin(pluginId, force);
+    getPluginState: async (_event: any, pluginId: string) => {
+      const plugin = lifecycleManager.getPlugin(pluginId);
+      return plugin ? plugin.state : null;
     },
 
-    getPluginState: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.getPluginState(pluginId);
+    getPluginHealth: async (_event: any, pluginId: string) => {
+      return lifecycleManager.getPluginHealth(pluginId);
     },
 
-    getPluginHealth: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.getPluginHealth(pluginId);
+    getPluginDependencies: async (_event: any, pluginId: string) => {
+      const plugin = lifecycleManager.getPlugin(pluginId);
+      return plugin ? plugin.dependencies : [];
     },
 
-    getPluginDependencies: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.getPluginDependencies(pluginId);
+    getPluginsByState: async (_event: any, state: PluginState) => {
+      return lifecycleManager.getPluginsByState(state);
     },
 
-    getAvailableUpdates: async (event: any) => {
-      return enhancedPluginManager.getAvailableUpdates();
+    getDependencyGraph: async (_event: any) => {
+      return lifecycleManager.getDependencyGraph();
     },
 
-    searchPlugins: async (event: any, query: string, options: any = {}) => {
-      return enhancedPluginManager.searchPlugins(query, options);
+    checkForUpdates: async (_event: any, pluginId?: string) => {
+      return lifecycleManager.checkForUpdates(pluginId);
     },
 
-    validatePlugin: async (event: any, pluginPath: string) => {
-      return enhancedPluginManager.validatePlugin(pluginPath);
-    },
+    // Plugin statistics and monitoring
+    getPluginStatistics: async (_event: any) => {
+      const plugins = lifecycleManager.getAllPlugins();
+      const runningPlugins = plugins.filter(p => p.state === PluginState.RUNNING);
+      const errorPlugins = plugins.filter(p => p.state === PluginState.ERROR);
+      const healthyPlugins = plugins.filter(p => p.healthStatus.healthy);
 
-    exportPlugin: async (event: any, pluginId: string, exportPath: string) => {
-      return enhancedPluginManager.exportPlugin(pluginId, exportPath);
-    },
-
-    clearPluginData: async (event: any, pluginId: string) => {
-      return enhancedPluginManager.clearPluginData(pluginId);
-    },
-
-    getPluginLogs: async (event: any, pluginId: string, options: any = {}) => {
-      return enhancedPluginManager.getPluginLogs(pluginId, options);
-    },
-
-    getPluginStatistics: async (event: any) => {
-      return enhancedPluginManager.getStatistics();
-    },
-
-    // Configuration management
-    updateRegistryConfig: async (event: any, config: any) => {
-      return enhancedPluginManager.updateRegistryConfig(config);
-    },
-
-    getRegistryConfig: async (event: any) => {
-      return enhancedPluginManager.getRegistryConfig();
+      return {
+        totalPlugins: plugins.length,
+        runningPlugins: runningPlugins.length,
+        errorPlugins: errorPlugins.length,
+        healthyPlugins: healthyPlugins.length,
+        updateCheckInterval: 300000, // 5 minutes
+        autoRecoveryEnabled: true
+      };
     }
   };
-}; 
+};

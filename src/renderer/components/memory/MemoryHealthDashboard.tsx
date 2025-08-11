@@ -1,62 +1,41 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { MemoryEntity, MemoryTier } from '@shared/types/memory';
-import { MemoryUsageHeatmap } from './MemoryUsageHeatmap';
-import { MemoryDistributionAnalysis } from './MemoryDistributionAnalysis';
-import { MemoryPerformanceMonitor } from './MemoryPerformanceMonitor';
-import '../../styles/memory-health-dashboard.css';
-
-// Import shared utilities - showcasing advanced statistical analysis!
+import React, { useState, useEffect, useMemo } from 'react';
+import { MemoryEntity } from '@shared/types/memory';
+import { Typography, Box } from '@mui/material';
 import {
-  calculateMemoryStats,
-  calculateFragmentationAnalysis,
-  calculateEfficiencyAnalysis,
-  type MemoryStatistics,
-  type FragmentationAnalysis,
-  type EfficiencyAnalysis,
-  formatFileSize,
-  formatPercentage
-} from './utils/calculation-utils';
-
-// Import shared formatting utilities
-import {
-  createTooltip,
-  showTooltip
-} from './utils/d3-utils';
-
-import { MetricsCard } from './ui/MetricsCard';
-import { useMemoryMetrics } from './hooks/useMemoryMetrics';
-import { OptimizationActionParams } from './types/dashboard-types';
-
-interface MemoryHealthMetrics {
-  totalMemories: number;
-  totalSize: number;
-  averageImportance: number;
-  fragmentationScore: number;
-  accessPatternScore: number;
-  retentionScore: number;
-  tierDistribution: Record<MemoryTier, number>;
-  healthScore: number;
-  recommendations: Array<{
-    id: string;
-    type: 'optimization' | 'maintenance' | 'security' | 'performance';
-    priority: 'high' | 'medium' | 'low';
-    title: string;
-    description: string;
-    action: string;
-    impact: string;
-  }>;
-  // Enhanced metrics using shared utilities
-  comprehensiveStats: MemoryStatistics;
-  fragmentationAnalysis: FragmentationAnalysis;
-  efficiencyMetrics: EfficiencyAnalysis;
-}
+  HealthScoreCard,
+  QuickStatsGrid,
+  DistributionChart,
+  PerformanceTrends,
+  OptimizationRecommendations,
+  OptimizationControls
+} from './health';
 
 interface MemoryHealthDashboardProps {
   userId: string;
   memories: MemoryEntity[];
-  onOptimizationAction?: (actionType: string, params?: OptimizationActionParams) => void;
+  onOptimizationAction?: (actionType: string, params: any) => void;
   refreshInterval?: number;
 }
+
+interface HealthMetrics {
+  totalMemories: number;
+  memoryByType: Record<string, number>;
+  memoryByTier: Record<string, number>;
+  averageImportance: number;
+  healthScore: number;
+  storageEfficiency: number;
+  lastOptimized: Date | null;
+  recommendations: string[];
+}
+
+interface PerformanceMetric {
+  timestamp: Date;
+  memoryCount: number;
+  averageImportance: number;
+  healthScore: number;
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 export const MemoryHealthDashboard: React.FC<MemoryHealthDashboardProps> = ({
   userId: _userId,
@@ -64,497 +43,207 @@ export const MemoryHealthDashboard: React.FC<MemoryHealthDashboardProps> = ({
   onOptimizationAction,
   refreshInterval = 30000
 }) => {
-  const [healthMetrics, setHealthMetrics] = useState<MemoryHealthMetrics | null>(null);
-  const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d'>('7d');
-  const [activeView, setActiveView] = useState<'overview' | 'heatmap' | 'distribution' | 'performance'>('overview');
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [performanceHistory, setPerformanceHistory] = useState<PerformanceMetric[]>([]);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Advanced metrics calculations using shared utilities - dramatically simplified!
-  const advancedAnalysis = useMemo(() => {
-    if (memories.length === 0) return null;
+  // Calculate health metrics
+  const healthMetrics: HealthMetrics = useMemo(() => {
+    const total = memories.length;
+    const memoryByType: Record<string, number> = {};
+    const memoryByTier: Record<string, number> = {};
+    let totalImportance = 0;
 
-    // Use shared utilities for comprehensive analysis
-    const comprehensiveStats = calculateMemoryStats(memories);
-    const fragmentationAnalysis = calculateFragmentationAnalysis(memories);
-    const efficiencyMetrics = calculateEfficiencyAnalysis(memories);
+    memories.forEach(memory => {
+      // Count by type
+      memoryByType[memory.type] = (memoryByType[memory.type] || 0) + 1;
+      
+      // Count by tier
+      const tier = memory.memoryTier || 'cold';
+      memoryByTier[tier] = (memoryByTier[tier] || 0) + 1;
+      
+      // Sum importance
+      totalImportance += memory.importance || 0;
+    });
+
+    const averageImportance = total > 0 ? totalImportance / total : 0;
+    
+    // Calculate health score (0-100)
+    let healthScore = 100;
+    
+    // Penalty for too many low importance memories
+    const lowImportanceCount = memories.filter(m => (m.importance || 0) < 30).length;
+    const lowImportanceRatio = total > 0 ? lowImportanceCount / total : 0;
+    if (lowImportanceRatio > 0.5) {
+      healthScore -= (lowImportanceRatio - 0.5) * 100;
+    }
+    
+    // Bonus for good tier distribution
+    const hotTierRatio = (memoryByTier.hot || 0) / Math.max(total, 1);
+    if (hotTierRatio > 0.1 && hotTierRatio < 0.3) {
+      healthScore += 10; // Good hot tier ratio
+    }
+    
+    healthScore = Math.max(0, Math.min(100, healthScore));
+
+    // Storage efficiency (simulated)
+    const storageEfficiency = Math.min(100, 80 + Math.random() * 20);
+
+    // Generate recommendations
+    const recommendations: string[] = [];
+    if (lowImportanceRatio > 0.3) {
+      recommendations.push(`${Math.round(lowImportanceRatio * 100)}% of memories have low importance - consider archiving`);
+    }
+    if ((memoryByTier.hot || 0) / Math.max(total, 1) > 0.4) {
+      recommendations.push('Too many memories in hot tier - consider moving some to warm tier');
+    }
+    if (total > 1000) {
+      recommendations.push('Large memory count detected - consider enabling automatic optimization');
+    }
+    if (averageImportance < 50) {
+      recommendations.push('Average importance is low - review memory rating criteria');
+    }
 
     return {
-      comprehensiveStats,
-      fragmentationAnalysis,
-      efficiencyMetrics
+      totalMemories: total,
+      memoryByType,
+      memoryByTier,
+      averageImportance,
+      healthScore,
+      storageEfficiency,
+      lastOptimized: null, // Would be fetched from service
+      recommendations
     };
   }, [memories]);
 
-  // Calculate comprehensive health metrics using shared utilities
-  const calculateHealthMetrics = useCallback((): MemoryHealthMetrics => {
-    if (memories.length === 0 || !advancedAnalysis) {
-      return {
-        totalMemories: 0,
-        totalSize: 0,
-        averageImportance: 0,
-        fragmentationScore: 0,
-        accessPatternScore: 0,
-        retentionScore: 0,
-        tierDistribution: { hot: 0, warm: 0, cold: 0 },
-        healthScore: 0,
-        recommendations: [],
-        comprehensiveStats: {} as MemoryStatistics,
-        fragmentationAnalysis: {} as FragmentationAnalysis,
-        efficiencyMetrics: {} as EfficiencyAnalysis
+  // Update performance history
+  useEffect(() => {
+    const updateHistory = () => {
+      const newMetric: PerformanceMetric = {
+        timestamp: new Date(),
+        memoryCount: healthMetrics.totalMemories,
+        averageImportance: healthMetrics.averageImportance,
+        healthScore: healthMetrics.healthScore
       };
-    }
 
-    const { comprehensiveStats, fragmentationAnalysis, efficiencyMetrics } = advancedAnalysis;
-
-    // Enhanced health scoring using efficiency metrics
-    const fragmentationScore = Math.round(Math.max(0, 100 - fragmentationAnalysis.score));
-    const accessPatternScore = Math.round(efficiencyMetrics.overallScore);
-    const retentionScore = Math.round(fragmentationAnalysis.wasteMetrics.efficiency);
-    
-    // Advanced overall health score using multiple factors
-    const healthScore = Math.round(
-      (fragmentationScore * 0.25 + 
-       accessPatternScore * 0.35 + 
-       retentionScore * 0.25 +
-       efficiencyMetrics.overallScore * 100 * 0.15)
-    );
-
-    // Generate smart recommendations using analysis results
-    const recommendations = generateAdvancedRecommendations(
-      fragmentationAnalysis,
-      efficiencyMetrics,
-      comprehensiveStats
-    );
-
-    return {
-      totalMemories: comprehensiveStats.totalCount,
-      totalSize: comprehensiveStats.storageSize,
-      averageImportance: comprehensiveStats.averageImportance,
-      fragmentationScore,
-      accessPatternScore,
-      retentionScore,
-      tierDistribution: comprehensiveStats.tierDistribution,
-      healthScore,
-      recommendations,
-      comprehensiveStats,
-      fragmentationAnalysis,
-      efficiencyMetrics
+      setPerformanceHistory(prev => {
+        const updated = [...prev, newMetric];
+        // Keep only last 20 points
+        return updated.slice(-20);
+      });
+      
+      setLastRefresh(new Date());
     };
-  }, [memories, advancedAnalysis]);
 
-  // Smart recommendations using advanced analysis
-  const generateAdvancedRecommendations = (
-    fragAnalysis: FragmentationAnalysis,
-    efficiency: EfficiencyAnalysis,
-    stats: MemoryStatistics
-  ) => {
-    const recommendations = [];
+    // Initial update
+    updateHistory();
 
-    // Fragmentation-based recommendations
-    if (fragAnalysis.score > 30) {
-      recommendations.push({
-        id: 'advanced-tier-rebalance',
-        type: 'optimization' as const,
-        priority: 'high' as const,
-        title: 'Advanced Tier Rebalancing Required',
-        description: `High fragmentation detected (${fragAnalysis.score.toFixed(1)}/100). ${fragAnalysis.hotSpots.length} optimization hotspots identified.`,
-        action: 'Run intelligent tier redistribution based on access patterns and importance scores',
-        impact: `Improve access speed by ${Math.round(fragAnalysis.score * 0.5)}%`
-      });
-    }
-
-    // Efficiency-based recommendations
-    if (efficiency.overallScore < 60) {
-      const misplacedCount = efficiency.misplacedMemories.length;
-      recommendations.push({
-        id: 'access-pattern-optimization',
-        type: 'performance' as const,
-        priority: 'medium' as const,
-        title: 'Optimize Memory Placement',
-        description: `Low efficiency score (${efficiency.overallScore.toFixed(1)}/100). ${misplacedCount} memories are in suboptimal tiers.`,
-        action: 'Relocate misplaced memories to appropriate tiers based on importance levels',
-        impact: `Improve system efficiency by ${Math.round((100 - efficiency.overallScore) * 0.4)}%`
-      });
-    }
-
-    // Storage efficiency recommendations
-    if (fragAnalysis.wasteMetrics.efficiency < 70) {
-      recommendations.push({
-        id: 'storage-optimization',
-        type: 'maintenance' as const,
-        priority: 'high' as const,
-        title: 'Storage Efficiency Improvement',
-        description: `Low storage efficiency (${fragAnalysis.wasteMetrics.efficiency.toFixed(1)}%). ${fragAnalysis.wasteMetrics.underUtilized.toFixed(1)}% capacity underutilized.`,
-        action: 'Compress underutilized memories and optimize storage allocation',
-        impact: `Reduce storage usage by ${Math.round(fragAnalysis.wasteMetrics.underUtilized * 0.6)}%`
-      });
-    }
-
-    // Scale-based recommendations
-    if (stats.totalCount > 5000) {
-      recommendations.push({
-        id: 'large-scale-optimization',
-        type: 'performance' as const,
-        priority: 'medium' as const,
-        title: 'Large-Scale Memory Management',
-        description: `Managing ${stats.totalCount} memories may impact performance. Consider implementing automated lifecycle management.`,
-        action: 'Enable automated archival for old, low-importance memories',
-        impact: 'Maintain performance at scale and reduce maintenance overhead'
-      });
-    }
-
-    return recommendations;
-  };
-
-  // Enable advanced analytics display when we have metrics
-  const showAdvancedAnalytics = useMemo(() => {
-    return healthMetrics && healthMetrics.comprehensiveStats.totalCount > 0;
-  }, [healthMetrics]);
-
-  // Use shared metrics hook for core stats
-  const memoryMetrics = useMemoryMetrics(memories);
-
-  // Update metrics when memories change
-  useEffect(() => {
-    const metrics = calculateHealthMetrics();
-    setHealthMetrics(metrics);
-  }, [calculateHealthMetrics]);
-
-  // Auto-refresh metrics with efficiency considerations
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsRefreshing(true);
-      const metrics = calculateHealthMetrics();
-      setHealthMetrics(metrics);
-      setTimeout(() => setIsRefreshing(false), 500);
-    }, refreshInterval);
-
+    // Set up interval
+    const interval = setInterval(updateHistory, refreshInterval);
     return () => clearInterval(interval);
-  }, [calculateHealthMetrics, refreshInterval]);
+  }, [healthMetrics, refreshInterval]);
 
-  const handleOptimizationAction = (actionId: string, actionType: string) => {
-    if (onOptimizationAction) {
-      const params: OptimizationActionParams = { actionId, timeRange, metrics: healthMetrics };
-      onOptimizationAction(actionType, params);
+  // Handle optimization actions
+  const handleOptimization = async (actionType: string) => {
+    setIsOptimizing(true);
+    try {
+      await onOptimizationAction?.(actionType, { memories: memories.length });
+      // Simulate optimization delay
+      setTimeout(() => {
+        setIsOptimizing(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Optimization failed:', error);
+      setIsOptimizing(false);
     }
   };
 
-  // Add a refresh handler function
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    const metrics = calculateHealthMetrics();
-    setHealthMetrics(metrics);
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
+  // Prepare chart data
+  const typeChartData = Object.entries(healthMetrics.memoryByType).map(([type, count]) => ({
+    name: type,
+    value: count,
+    percentage: Math.round((count / healthMetrics.totalMemories) * 100)
+  }));
 
-  if (!healthMetrics) {
-    return (
-      <div className="memory-health-dashboard loading">
-        <div className="loading-spinner"></div>
-        <p>Analyzing memory health with advanced algorithms...</p>
-      </div>
-    );
-  }
+  const tierChartData = Object.entries(healthMetrics.memoryByTier).map(([tier, count]) => ({
+    name: tier,
+    count,
+    percentage: Math.round((count / healthMetrics.totalMemories) * 100)
+  }));
 
   return (
-    <div className="memory-health-dashboard">
-      <div className="dashboard-header">
-        <div className="header-content">
-          <h1>Advanced Memory Health Dashboard</h1>
-          <p>AI-powered analysis and optimization recommendations</p>
-        </div>
-        
-        <div className="dashboard-controls">
-          <div className="view-selector">
-            <button 
-              className={activeView === 'overview' ? 'active' : ''}
-              onClick={() => setActiveView('overview')}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') setActiveView('overview');
-              }}
-              aria-label="Show Overview"
-              tabIndex={0}
-            >
-              Overview
-            </button>
-            <button 
-              className={activeView === 'heatmap' ? 'active' : ''}
-              onClick={() => setActiveView('heatmap')}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') setActiveView('heatmap');
-              }}
-              aria-label="Show Heatmap"
-              tabIndex={0}
-            >
-              Heatmap
-            </button>
-            <button 
-              className={activeView === 'distribution' ? 'active' : ''}
-              onClick={() => setActiveView('distribution')}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') setActiveView('distribution');
-              }}
-              aria-label="Show Distribution"
-              tabIndex={0}
-            >
-              Distribution
-            </button>
-            <button 
-              className={activeView === 'performance' ? 'active' : ''}
-              onClick={() => setActiveView('performance')}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') setActiveView('performance');
-              }}
-              aria-label="Show Performance"
-              tabIndex={0}
-            >
-              Performance
-            </button>
-          </div>
+    <Box className="memory-health-dashboard" sx={{ p: 2 }}>
+      <Typography variant="h5" gutterBottom>
+        Memory System Health Dashboard
+      </Typography>
+      
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+        Last updated: {lastRefresh.toLocaleTimeString()}
+      </Typography>
 
-          <div className="time-range-selector">
-            <label>Analysis Period:</label>
-            <select 
-              value={timeRange} 
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTimeRange(e.target.value as typeof timeRange)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  const target = e.target as HTMLSelectElement;
-                  setTimeRange(target.value as typeof timeRange);
-                }
-              }}
-              aria-label="Select Analysis Period"
-              tabIndex={0}
-            >
-              <option value="24h">Last 24 Hours</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last 90 Days</option>
-            </select>
-          </div>
-          
-          <button 
-            className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
-            onClick={handleRefresh}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleRefresh();
-              }
-            }}
-            aria-label="Refresh Analysis"
-            tabIndex={0}
-          >
-            {isRefreshing ? '🔄' : '⟳'} Refresh Analysis
-          </button>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {/* First Row: Health Score and Quick Stats */}
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 33%' }, minWidth: '300px' }}>
+            <HealthScoreCard 
+              healthScore={healthMetrics.healthScore}
+              title="Overall Health Score"
+              size="large"
+            />
+          </Box>
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 66%' }, minWidth: '400px' }}>
+            <QuickStatsGrid
+              totalMemories={healthMetrics.totalMemories}
+              averageImportance={healthMetrics.averageImportance}
+              storageEfficiency={healthMetrics.storageEfficiency}
+              hotTierCount={healthMetrics.memoryByTier.hot || 0}
+            />
+          </Box>
+        </Box>
 
-      <div className="dashboard-content">
-        {activeView === 'overview' && (
-          <>
-            {/* Enhanced Metric Cards with Advanced Analysis */}
-            <div className="metrics-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <MetricsCard
-                label="AI Health Score"
-                value={healthMetrics.healthScore}
-                status={healthMetrics.healthScore >= 80 ? 'good' : healthMetrics.healthScore >= 60 ? 'warning' : 'danger'}
-                icon={<span aria-hidden="true">🧠</span>}
-                unit="%"
-                ariaLabel="AI Health Score"
-              />
-              <MetricsCard
-                label="Memory Analytics"
-                value={memoryMetrics.totalCount}
-                status="neutral"
-                icon={<span aria-hidden="true">📊</span>}
-                unit="memories"
-                ariaLabel="Total Memories"
-              />
-              <MetricsCard
-                label="Storage Analytics"
-                value={formatFileSize(memoryMetrics.storageSize)}
-                status="neutral"
-                icon={<span aria-hidden="true">💾</span>}
-                unit="KB"
-                ariaLabel="Storage Analytics"
-              />
-              <MetricsCard
-                label="Optimization Score"
-                value={healthMetrics.fragmentationScore}
-                status={healthMetrics.fragmentationScore >= 80 ? 'good' : healthMetrics.fragmentationScore >= 60 ? 'warning' : 'danger'}
-                icon={<span aria-hidden="true">🔧</span>}
-                unit="%"
-                ariaLabel="Optimization Score"
-              />
-            </div>
+        {/* Second Row: Distribution Charts */}
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: '1 1 48%', minWidth: '300px' }}>
+            <DistributionChart
+              title="Memory Type Distribution"
+              data={typeChartData}
+              colors={COLORS}
+              chartType="circle"
+            />
+          </Box>
+          <Box sx={{ flex: '1 1 48%', minWidth: '300px' }}>
+            <DistributionChart
+              title="Memory Tier Distribution"
+              data={tierChartData.map(entry => ({
+                name: entry.name,
+                value: entry.count,
+                percentage: entry.percentage
+              }))}
+              colors={COLORS}
+              chartType="square"
+            />
+          </Box>
+        </Box>
 
-            {/* Advanced Analytics Display */}
-            {showAdvancedAnalytics && (
-              <div className="advanced-analytics">
-                <h3>Advanced Analytics</h3>
-                <div className="analytics-grid">
-                  <div className="analytics-card">
-                    <h4>Tier Distribution Analysis</h4>
-                    <div className="tier-breakdown">
-                      {healthMetrics && healthMetrics.comprehensiveStats && healthMetrics.comprehensiveStats.tierDistribution
-                        ? Object.entries(healthMetrics.comprehensiveStats.tierDistribution).map(([tier, count]) => (
-                            <div key={tier} className={`tier-stat ${tier}`}>
-                              <span className="tier-name">{tier.toUpperCase()}</span>
-                              <span className="tier-count">{count ?? 0}</span>
-                              <span className="tier-percentage">
-                                ({
-                                  healthMetrics.comprehensiveStats.tierPercentages &&
-                                  typeof healthMetrics.comprehensiveStats.tierPercentages[tier as MemoryTier] === 'number'
-                                    ? formatPercentage(healthMetrics.comprehensiveStats.tierPercentages[tier as MemoryTier])
-                                    : 'N/A'
-                                })
-                              </span>
-                            </div>
-                          ))
-                        : <div className="tier-stat">No data</div>}
-                    </div>
-                  </div>
+        {/* Third Row: Performance Trends */}
+        <Box>
+          <PerformanceTrends performanceHistory={performanceHistory} />
+        </Box>
 
-                  <div className="analytics-card">
-                    <h4>Efficiency Insights</h4>
-                    <div className="efficiency-insights">
-                      <div className="insight-stat">
-                        <span className="stat-label">Misplaced Memories:</span>
-                        <span className="stat-value">
-                          {healthMetrics && healthMetrics.efficiencyMetrics && Array.isArray(healthMetrics.efficiencyMetrics.misplacedMemories)
-                            ? healthMetrics.efficiencyMetrics.misplacedMemories.length
-                            : 0}
-                        </span>
-                      </div>
-                      <div className="insight-stat">
-                        <span className="stat-label">Fragmentation Hotspots:</span>
-                        <span className="stat-value">
-                          {healthMetrics && healthMetrics.fragmentationAnalysis && Array.isArray(healthMetrics.fragmentationAnalysis.hotSpots)
-                            ? healthMetrics.fragmentationAnalysis.hotSpots.length
-                            : 0}
-                        </span>
-                      </div>
-                      <div className="insight-stat">
-                        <span className="stat-label">Storage Efficiency:</span>
-                        <span className="stat-value">
-                          {healthMetrics && healthMetrics.fragmentationAnalysis && healthMetrics.fragmentationAnalysis.wasteMetrics && typeof healthMetrics.fragmentationAnalysis.wasteMetrics.efficiency === 'number'
-                            ? healthMetrics.fragmentationAnalysis.wasteMetrics.efficiency.toFixed(1) + '%'
-                            : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* AI-Powered Recommendations */}
-            <div className="recommendations-container">
-              <h3>AI-Powered Optimization Recommendations</h3>
-              {healthMetrics.recommendations.length === 0 ? (
-                <div className="no-recommendations">
-                  <span className="icon">🎯</span>
-                  <p>Your memory system is operating at peak efficiency! No optimizations needed.</p>
-                </div>
-              ) : (
-                <div className="recommendations-list">
-                  {healthMetrics.recommendations.map((rec) => (
-                    <div key={rec.id} className={`recommendation-card ${rec.priority}`}>
-                      <div className="recommendation-header">
-                        <div className="recommendation-meta">
-                          <span className={`priority-badge ${rec.priority}`}>
-                            {rec.priority.toUpperCase()}
-                          </span>
-                          <span className={`type-badge ${rec.type}`}>
-                            {rec.type}
-                          </span>
-                        </div>
-                        <h4>{rec.title}</h4>
-                      </div>
-                      <div className="recommendation-body">
-                        <p className="description">{rec.description}</p>
-                        <p className="action"><strong>AI Recommendation:</strong> {rec.action}</p>
-                        <p className="impact"><strong>Predicted Impact:</strong> {rec.impact}</p>
-                      </div>
-                      <div className="recommendation-actions">
-                        <button 
-                          className="action-button primary"
-                          onClick={() => handleOptimizationAction(rec.id, rec.type)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleOptimizationAction(rec.id, rec.type);
-                            }
-                          }}
-                          aria-label={`Apply AI Fix for ${rec.title}`}
-                          tabIndex={0}
-                        >
-                          Apply AI Fix
-                        </button>
-                        <button
-                          className="action-button secondary"
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              const tooltip = createTooltip();
-                              // Type-safe: try to use nativeEvent if available
-                              const mouseEvent = ('nativeEvent' in e && e.nativeEvent instanceof MouseEvent)
-                                ? e.nativeEvent as MouseEvent
-                                : undefined;
-                              showTooltip(
-                                tooltip,
-                                `<div><strong>${rec.title}</strong></div><div>${rec.description}</div>`,
-                                mouseEvent || (window.event as MouseEvent)
-                              );
-                            }
-                          }}
-                          aria-label="Show Analysis Details"
-                          tabIndex={0}
-                        >
-                          Analysis Details
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {activeView === 'heatmap' && (
-          <MemoryUsageHeatmap
-            memories={memories}
-            timeRange={timeRange}
-            onHotspotClick={(data) => {
-              console.log('Hotspot clicked:', data);
-            }}
-          />
-        )}
-
-        {activeView === 'distribution' && (
-          <MemoryDistributionAnalysis
-            memories={memories}
-            onFragmentationDetected={(analysis) => {
-              console.log('Fragmentation analysis:', analysis);
-            }}
-            enableInteraction={true}
-          />
-        )}
-
-        {activeView === 'performance' && (
-          <MemoryPerformanceMonitor
-            memories={memories}
-            refreshInterval={5000}
-            onPerformanceAlert={(alert) => {
-              console.log('Performance alert:', alert);
-            }}
-            onOptimizationRecommended={(rec) => {
-              console.log('Optimization recommended:', rec);
-            }}
-          />
-        )}
-      </div>
-    </div>
+        {/* Fourth Row: Recommendations and Controls */}
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: '1 1 65%', minWidth: '400px' }}>
+            <OptimizationRecommendations recommendations={healthMetrics.recommendations} />
+          </Box>
+          <Box sx={{ flex: '1 1 33%', minWidth: '300px' }}>
+            <OptimizationControls
+              isOptimizing={isOptimizing}
+              lastOptimized={healthMetrics.lastOptimized}
+              onOptimize={handleOptimization}
+            />
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
-}; 
+};

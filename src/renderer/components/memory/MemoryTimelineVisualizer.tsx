@@ -1,45 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import { MemoryEntity, MemoryTier } from '@shared/types/memory';
-import '../../styles/memory-timeline.css';
-
-// Import shared utilities - showcasing temporal visualization patterns!
-import {
-  calculateDimensions,
-  initializeSVG,
-  createMainGroup,
-  createTimeScale,
-  calculateTimeDomain,
-  createRadiusScale,
-  createXAxis,
-  addAxisLabel,
-  processMemoriesForVisualization,
-  formatMemoryTooltip,
-  createTooltip,
-  showTooltip,
-  hideTooltip,
-  removeAllTooltips,
-  MEMORY_TIER_COLORS,
-  type SVGDimensions,
-  type ProcessedMemoryNode
-} from './utils/d3-utils';
-
-interface TimelineNode {
-  id: string;
-  entity: MemoryEntity;
-  date: Date;
-  tier: MemoryTier;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-}
+import { MemoryEntity } from '@shared/types/memory';
 
 interface MemoryTimelineVisualizerProps {
   userId: string;
   memories: MemoryEntity[];
   selectedMemoryId?: string;
-  onMemorySelect?: (memoryId: string) => void;
+  onMemorySelect: (memoryId: string) => void;
   onMemoryHover?: (memory: MemoryEntity | null) => void;
   onTimeRangeChange?: (start: Date, end: Date) => void;
   width?: number;
@@ -47,7 +14,13 @@ interface MemoryTimelineVisualizerProps {
   enableBrush?: boolean;
   showDensityChart?: boolean;
   timeGranularity?: 'hour' | 'day' | 'week' | 'month';
-  enableTooltips?: boolean;
+}
+
+interface TimelineDataPoint {
+  date: Date;
+  memory: MemoryEntity;
+  x: number;
+  y: number;
 }
 
 export const MemoryTimelineVisualizer: React.FC<MemoryTimelineVisualizerProps> = ({
@@ -58,305 +31,300 @@ export const MemoryTimelineVisualizer: React.FC<MemoryTimelineVisualizerProps> =
   onMemoryHover,
   onTimeRangeChange,
   width = 1000,
-  height = 400,
+  height = 500,
   enableBrush = true,
-  showDensityChart: _showDensityChart = true,
-  timeGranularity = 'day',
-  enableTooltips = true
+  showDensityChart = true,
+  timeGranularity: _timeGranularity = 'day'
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [hoveredMemory, setHoveredMemory] = useState<MemoryEntity | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState<[Date, Date] | null>(null);
-  const [currentGranularity, setCurrentGranularity] = useState(timeGranularity);
 
-  // Calculate dimensions using shared utility
-  const dimensions: SVGDimensions = useMemo(() => 
-    calculateDimensions(width, height, { top: 20, right: 50, bottom: 60, left: 70 }), 
-    [width, height]
-  );
+  // Process memories into timeline data points
+  const timelineData: TimelineDataPoint[] = memories
+    .filter(memory => memory.createdAt)
+    .map(memory => ({
+      date: new Date(memory.createdAt!),
+      memory,
+      x: 0, // Will be calculated by time scale
+      y: memory.importance || 0
+    }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  const brushHeight = 60;
-  const mainTimelineHeight = dimensions.innerHeight - brushHeight - 20;
+  // Color scale for memory types
+  const colorScale = d3.scaleOrdinal<string>()
+    .domain(['text', 'image', 'audio', 'video', 'file'])
+    .range(['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']);
 
-  // Process memories using shared utilities
-  const processedNodes = useMemo((): ProcessedMemoryNode[] => {
-    const importanceValues = memories.map(m => m.importance || 0);
-    const radiusScale = createRadiusScale(importanceValues, 3, 8); // Smaller range for timeline
+  // Size scale for importance
+  const sizeScale = d3.scaleLinear()
+    .domain(d3.extent(memories, d => d.importance || 0) as [number, number])
+    .range([4, 12]);
+
+  // Initialize timeline visualization
+  const initializeTimeline = useCallback(() => {
+    if (!svgRef.current || timelineData.length === 0) return;
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').remove();
+
+    const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.bottom - margin.top;
+
+    // Create time scale
+    const timeExtent = d3.extent(timelineData, d => d.date) as [Date, Date];
+    const xScale = d3.scaleTime()
+      .domain(timeExtent)
+      .range([0, chartWidth]);
+
+    // Create importance scale
+    const yScale = d3.scaleLinear()
+      .domain([0, 100]) // Importance is 0-100
+      .range([chartHeight, 0]);
+
+    // Main chart group
+    const chartGroup = svg.append('g')
+      .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+    // Add axes
+    const xAxis = d3.axisBottom(xScale)
+      .tickFormat(d3.timeFormat('%m/%d') as any);
     
-    return processMemoriesForVisualization(memories, radiusScale);
-  }, [memories]);
+    const yAxis = d3.axisLeft(yScale);
 
-  // Convert to timeline nodes with temporal positioning
-  const timelineNodes = useMemo((): TimelineNode[] => {
-    return processedNodes
-      .filter(node => node.date) // Only nodes with valid dates
-      .map(node => ({
-        id: node.id,
-        entity: node.entity,
-        date: node.date!,
-        tier: node.tier,
-        x: 0, // Will be calculated by time scale
-        y: 0, // Will be calculated by tier positioning
-        radius: node.radius,
-        color: node.color // Already using shared colors!
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [processedNodes]);
+    chartGroup.append('g')
+      .attr('class', 'x-axis')
+      .attr('transform', `translate(0, ${chartHeight})`)
+      .call(xAxis);
 
-  // Time domain using shared utility
-  const timeDomain = useMemo((): [Date, Date] => 
-    calculateTimeDomain(memories, 30), 
-    [memories]
-  );
+    chartGroup.append('g')
+      .attr('class', 'y-axis')
+      .call(yAxis);
 
-  // Create time scale using shared utility
-  const timeScale = useMemo(() => 
-    createTimeScale(timeDomain, [dimensions.margin.left, width - dimensions.margin.right]), 
-    [timeDomain, width, dimensions]
-  );
+    // Add axis labels
+    chartGroup.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('y', 0 - margin.left)
+      .attr('x', 0 - (chartHeight / 2))
+      .attr('dy', '1em')
+      .style('text-anchor', 'middle')
+      .text('Importance');
 
-  // Position nodes based on time scale and tier grouping
-  const positionedNodes = useMemo((): TimelineNode[] => {
-    const tierYPositions = {
-      'hot': mainTimelineHeight * 0.2,
-      'warm': mainTimelineHeight * 0.5,
-      'cold': mainTimelineHeight * 0.8
-    };
+    chartGroup.append('text')
+      .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom})`)
+      .style('text-anchor', 'middle')
+      .text('Time');
 
-    // Group nodes by time buckets to avoid overlap
-    const bucketSize = Math.max(1, dimensions.innerWidth / 100);
-    const buckets = new Map<number, TimelineNode[]>();
+    // Create density chart if enabled
+    if (showDensityChart) {
+      const densityHeight = 60;
+      const densityGroup = svg.append('g')
+        .attr('transform', `translate(${margin.left}, ${height - densityHeight - 10})`);
 
-    timelineNodes.forEach(node => {
-      const x = timeScale(node.date);
-      const bucketIndex = Math.floor((x - dimensions.margin.left) / bucketSize);
-      
-      if (!buckets.has(bucketIndex)) {
-        buckets.set(bucketIndex, []);
-      }
-      buckets.get(bucketIndex)!.push(node);
-    });
+      // Group memories by time interval
+      const timeInterval = d3.timeDay; // Can be adjusted based on timeGranularity
+      const densityData = d3.rollup(
+        timelineData,
+        v => v.length,
+        d => timeInterval.floor(d.date)
+      );
 
-    // Position nodes within each bucket using smart jittering
-    return timelineNodes.map(node => {
-      const x = timeScale(node.date);
-      const bucketIndex = Math.floor((x - dimensions.margin.left) / bucketSize);
-      const bucketNodes = buckets.get(bucketIndex)!;
-      const nodeIndex = bucketNodes.indexOf(node);
-      
-      // Base Y position for tier
-      const baseY = tierYPositions[node.tier];
-      
-      // Add smart jitter for overlapping nodes in same bucket
-      const jitterRange = 15;
-      const jitter = bucketNodes.length > 1 
-        ? (nodeIndex - (bucketNodes.length - 1) / 2) * (jitterRange / Math.max(bucketNodes.length, 1))
-        : 0;
-      
-      return {
-        ...node,
-        x,
-        y: dimensions.margin.top + baseY + jitter
-      };
-    });
-  }, [timelineNodes, timeScale, dimensions, mainTimelineHeight]);
+      const densityArray = Array.from(densityData, ([date, count]) => ({ date, count }));
+      const densityXScale = d3.scaleTime()
+        .domain(timeExtent)
+        .range([0, chartWidth]);
 
-  // Handle brush selection with enhanced logic
-  const handleBrushEnd = useCallback((selection: [number, number] | null) => {
-    if (selection) {
-      const [x0, x1] = selection;
-      const startDate = timeScale.invert(x0);
-      const endDate = timeScale.invert(x1);
-      
-      setSelectedTimeRange([startDate, endDate]);
-      onTimeRangeChange?.(startDate, endDate);
-    } else {
-      setSelectedTimeRange(null);
-      onTimeRangeChange?.(timeDomain[0], timeDomain[1]);
+      const densityYScale = d3.scaleLinear()
+        .domain([0, d3.max(densityArray, d => d.count) || 1])
+        .range([densityHeight, 0]);
+
+      // Create density bars
+      densityGroup.selectAll('.density-bar')
+        .data(densityArray)
+        .enter().append('rect')
+        .attr('class', 'density-bar')
+        .attr('x', d => densityXScale(d.date))
+        .attr('y', d => densityYScale(d.count))
+        .attr('width', chartWidth / densityArray.length)
+        .attr('height', d => densityHeight - densityYScale(d.count))
+        .attr('fill', '#e0e0e0')
+        .attr('stroke', '#ccc');
+
+      // Add density axis
+      const densityAxis = d3.axisLeft(densityYScale).ticks(3);
+      densityGroup.append('g')
+        .call(densityAxis);
+
+      densityGroup.append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', -30)
+        .attr('x', -densityHeight / 2)
+        .style('text-anchor', 'middle')
+        .style('font-size', '12px')
+        .text('Count');
     }
-  }, [timeScale, onTimeRangeChange, timeDomain]);
 
-  // Render the timeline - dramatically simplified with shared utilities!
-  useEffect(() => {
-    if (!svgRef.current) return;
-
-    // Initialize SVG using shared utility
-    const svg = initializeSVG({ current: svgRef.current }, 'memory-timeline-container');
-    if (!svg) return;
-
-    // Create main group using shared utility
-    const mainGroup = createMainGroup(svg, dimensions.margin, 'main-timeline');
-
-    // Create tooltip using shared utility
-    const tooltip = enableTooltips ? createTooltip({
-      className: 'timeline-tooltip',
-      zIndex: 1000
-    }) : null;
-
-    // Create time axis using shared utility
-    createXAxis(mainGroup, timeScale, mainTimelineHeight, {
-      tickCount: Math.floor(dimensions.innerWidth / 100),
-      tickFormat: (domainValue) => {
-        const date = domainValue as Date;
-        return d3.timeFormat('%m/%d')(date);
-      },
-      fontSize: '11px'
-    });
-
-    // Add axis label using shared utility
-    addAxisLabel(mainGroup, 'Timeline', 'x', dimensions, { x: 0, y: 35 });
-
-    // Add tier labels using shared colors
-    const tierYPositions = {
-      'hot': mainTimelineHeight * 0.2,
-      'warm': mainTimelineHeight * 0.5,
-      'cold': mainTimelineHeight * 0.8
-    };
-
-    Object.entries(tierYPositions).forEach(([tier, yPos]) => {
-      mainGroup.append('text')
-        .attr('x', -10)
-        .attr('y', yPos)
-        .attr('text-anchor', 'end')
-        .attr('alignment-baseline', 'middle')
-        .attr('font-size', '12px')
-        .attr('font-weight', 'bold')
-        .attr('fill', MEMORY_TIER_COLORS[tier as MemoryTier]) // Using shared colors!
-        .text(tier.toUpperCase());
-    });
-
-    // Render memory nodes with enhanced interactions
-    mainGroup.append('g')
-      .attr('class', 'memory-nodes')
-      .selectAll('circle')
-      .data(positionedNodes)
+    // Add memory points
+    const memoryPoints = chartGroup.selectAll('.memory-point')
+      .data(timelineData)
       .enter().append('circle')
-      .attr('cx', d => d.x - dimensions.margin.left) // Adjust for group transform
-      .attr('cy', d => d.y - dimensions.margin.top)   // Adjust for group transform
-      .attr('r', d => d.radius)
-      .attr('fill', d => d.color)
-      .attr('stroke', d => selectedMemoryId === d.id ? '#2c3e50' : '#fff')
-      .attr('stroke-width', d => selectedMemoryId === d.id ? 2 : 1)
-      .attr('opacity', d => {
-        if (!selectedTimeRange) return 1;
-        const [start, end] = selectedTimeRange;
-        return d.date >= start && d.date <= end ? 1 : 0.3;
-      })
-      .attr('cursor', 'pointer')
-      .on('click', (_event, d) => {
-        onMemorySelect?.(d.id);
-      })
-      .on('mouseover', (event, d) => {
-        onMemoryHover?.(d.entity);
+      .attr('class', 'memory-point')
+      .attr('cx', d => xScale(d.date))
+      .attr('cy', d => yScale(d.y))
+      .attr('r', d => sizeScale(d.memory.importance || 0))
+      .attr('fill', d => colorScale(d.memory.type))
+      .attr('stroke', d => d.memory.id === selectedMemoryId ? '#00ff00' : '#fff')
+      .attr('stroke-width', d => d.memory.id === selectedMemoryId ? 3 : 1)
+      .style('opacity', 0.7)
+      .style('cursor', 'pointer');
+
+    // Add hover and click interactions
+    memoryPoints
+      .on('mouseenter', (event, d) => {
+        setHoveredMemory(d.memory);
+        onMemoryHover?.(d.memory);
         
-        // Show tooltip using shared utility
-        if (enableTooltips && tooltip) {
-          const tooltipContent = formatMemoryTooltip(d.entity);
-          showTooltip(tooltip, tooltipContent, event);
-        }
+        // Highlight point
+        d3.select(event.currentTarget)
+          .style('opacity', 1)
+          .attr('stroke-width', 2);
       })
-      .on('mouseout', () => {
+      .on('mouseleave', (event, d) => {
+        setHoveredMemory(null);
         onMemoryHover?.(null);
         
-        // Hide tooltip using shared utility
-        if (enableTooltips && tooltip) {
-          hideTooltip(tooltip);
-        }
+        // Reset highlight
+        d3.select(event.currentTarget)
+          .style('opacity', 0.7)
+          .attr('stroke-width', d.memory.id === selectedMemoryId ? 3 : 1);
+      })
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        onMemorySelect(d.memory.id || '');
       });
 
-    // Add brush if enabled
-    if (enableBrush) {
-      const brushGroup = svg.append('g')
-        .attr('class', 'brush-container')
-        .attr('transform', `translate(0, ${height - brushHeight})`);
-
-      // Create brush with enhanced extent
+    // Add brush for time range selection
+    if (enableBrush && onTimeRangeChange) {
       const brush = d3.brushX()
-        .extent([[dimensions.margin.left, 0], [width - dimensions.margin.right, brushHeight - 20]])
+        .extent([[0, 0], [chartWidth, chartHeight]])
         .on('end', (event) => {
-          handleBrushEnd(event.selection as [number, number] | null);
+          const selection = event.selection;
+          if (selection) {
+            const [x0, x1] = selection.map(xScale.invert);
+            setSelectedTimeRange([x0, x1]);
+            onTimeRangeChange(x0, x1);
+          }
         });
 
-      brushGroup.call(brush);
-
-      // Add mini axis for context using shared time scale
-      const miniScale = createTimeScale(timeDomain, [dimensions.margin.left, width - dimensions.margin.right], 0);
-
-      const miniAxis = d3.axisBottom(miniScale)
-        .ticks(5)
-        .tickFormat((domainValue) => {
-          const date = domainValue as Date;
-          return d3.timeFormat('%m/%d')(date);
-        });
-
-      brushGroup.append('g')
-        .attr('class', 'mini-axis')
-        .attr('transform', `translate(0, ${brushHeight - 20})`)
-        .call(miniAxis as any)
-        .selectAll('text')
-        .style('font-size', '10px');
+      chartGroup.append('g')
+        .attr('class', 'brush')
+        .call(brush);
     }
 
-    // Cleanup function
-    return () => {
-      removeAllTooltips('timeline-tooltip');
-    };
+    // Add zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.5, 10])
+      .on('zoom', (event) => {
+        const newXScale = event.transform.rescaleX(xScale);
+        
+        // Update axis
+        (chartGroup.select('.x-axis') as any)
+          .call(d3.axisBottom(newXScale).tickFormat(d3.timeFormat('%m/%d') as any));
+        
+        // Update points
+        memoryPoints
+          .attr('cx', d => newXScale(d.date));
+      });
 
-  }, [
-    timeScale, dimensions, mainTimelineHeight, brushHeight, positionedNodes, 
-    selectedMemoryId, selectedTimeRange, enableBrush, enableTooltips,
-    onMemorySelect, onMemoryHover, width, height, timeDomain, handleBrushEnd
-  ]);
+    svg.call(zoom);
+
+  }, [timelineData, width, height, selectedMemoryId, enableBrush, showDensityChart, onMemorySelect, onMemoryHover, onTimeRangeChange, colorScale, sizeScale]);
+
+  // Initialize visualization
+  useEffect(() => {
+    initializeTimeline();
+  }, [initializeTimeline]);
 
   return (
     <div className="memory-timeline-visualizer">
-      <div className="timeline-controls">
-        <div className="granularity-controls">
-          <label>Time Granularity:</label>
-          <select 
-            value={currentGranularity} 
-            onChange={(e) => {
-              setCurrentGranularity(e.target.value as typeof timeGranularity);
-            }}
-          >
-            <option value="hour">Hour</option>
-            <option value="day">Day</option>
-            <option value="week">Week</option>
-            <option value="month">Month</option>
-          </select>
-        </div>
-        
-        {selectedTimeRange && (
-          <div className="time-range-display">
-            <span>Selected: {selectedTimeRange[0].toLocaleDateString()} - {selectedTimeRange[1].toLocaleDateString()}</span>
-            <button onClick={() => {
-              setSelectedTimeRange(null);
-              onTimeRangeChange?.(timeDomain[0], timeDomain[1]);
-            }}>Clear Selection</button>
-          </div>
-        )}
-      </div>
-
       <svg
         ref={svgRef}
         width={width}
         height={height}
-        style={{ border: '1px solid #e1e5e9', borderRadius: '8px' }}
+        style={{ border: '1px solid #ddd', borderRadius: '4px' }}
       />
-
-      <div className="timeline-legend">
-        <div className="tier-legend">
-          <h4>Memory Tiers</h4>
-          {Object.entries(MEMORY_TIER_COLORS).map(([tier, color]) => (
-            <div key={tier} className="legend-item">
-              <div 
-                className="legend-color" 
-                style={{ backgroundColor: color }}
-              />
-              <span>{tier}</span>
+      
+      {/* Controls */}
+      <div className="timeline-controls" style={{ marginTop: '10px', display: 'flex', gap: '20px', fontSize: '12px' }}>
+        <div className="time-range-info">
+          {selectedTimeRange && (
+            <div>
+              <strong>Selected Range:</strong> {selectedTimeRange[0].toLocaleDateString()} - {selectedTimeRange[1].toLocaleDateString()}
+              <button 
+                style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '10px' }}
+                onClick={() => {
+                  setSelectedTimeRange(null);
+                  onTimeRangeChange?.(new Date(0), new Date());
+                }}
+              >
+                Clear
+              </button>
             </div>
-          ))}
+          )}
+        </div>
+        
+        <div className="memory-count">
+          <strong>Memories:</strong> {memories.length}
         </div>
       </div>
+
+      {/* Legend */}
+      <div className="timeline-legend" style={{ marginTop: '10px', display: 'flex', gap: '20px', fontSize: '12px' }}>
+        <div className="memory-types">
+          <strong>Memory Types:</strong>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
+            {['text', 'image', 'audio', 'video', 'file'].map(type => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div 
+                  style={{ 
+                    width: '12px', 
+                    height: '12px', 
+                    backgroundColor: colorScale(type),
+                    borderRadius: '50%' 
+                  }}
+                />
+                <span>{type}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Hover tooltip */}
+      {hoveredMemory && (
+        <div 
+          className="timeline-tooltip"
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            maxWidth: '250px',
+            pointerEvents: 'none',
+            zIndex: 1000
+          }}
+        >
+          <div><strong>Date:</strong> {hoveredMemory.createdAt ? new Date(hoveredMemory.createdAt).toLocaleString() : 'Unknown'}</div>
+          <div><strong>Type:</strong> {hoveredMemory.type}</div>
+          <div><strong>Importance:</strong> {hoveredMemory.importance}</div>
+          <div><strong>Content:</strong> {hoveredMemory.content?.substring(0, 60)}...</div>
+        </div>
+      )}
     </div>
   );
-}; 
+};

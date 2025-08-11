@@ -1,140 +1,637 @@
-import { EventEmitter } from 'events';
-import { PluginData, PluginManifest, PluginState } from '../../shared/types/plugin';
-import { SecurityEventLogger } from './security-event-logger';
-import { PluginManager } from './plugin-manager';
-import { PluginSandbox } from './plugin-sandbox';
-import { HealthMonitor } from './health-monitor';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import { PlatformUtils } from '../utils/platform';
+import { EventEmitter } from 'events'
+import * as fs from 'fs-extra'
+import * as path from 'path'
+import { app } from 'electron'
 
-export interface PluginLifecycleState {
-  state: 'installing' | 'starting' | 'running' | 'stopping' | 'stopped' | 'updating' | 'error' | 'uninstalling';
-  previousState?: PluginLifecycleState['state'];
-  timestamp: Date;
-  error?: string;
-  details?: Record<string, any>;
+export enum PluginState {
+  INSTALLING = 'installing',
+  STARTING = 'starting', 
+  RUNNING = 'running',
+  STOPPING = 'stopping',
+  STOPPED = 'stopped',
+  UPDATING = 'updating',
+  ERROR = 'error',
+  UNINSTALLING = 'uninstalling'
 }
 
 export interface PluginDependency {
-  pluginId: string;
-  version: string;
-  required: boolean;
-  satisfied: boolean;
-}
-
-export interface PluginUpdateInfo {
-  currentVersion: string;
-  availableVersion: string;
-  changelog?: string;
-  critical: boolean;
-  downloadUrl: string;
-  signature?: string;
+  pluginId: string
+  version: string
+  required: boolean
+  satisfied: boolean
 }
 
 export interface PluginHealthStatus {
-  healthy: boolean;
-  uptime: number;
-  memoryUsage: number;
-  cpuUsage: number;
-  errors: number;
-  lastError?: string;
+  healthy: boolean
+  uptime: number
+  memoryUsage: number
+  cpuUsage: number
+  errors: number
+  lastError?: string
   performance: {
-    avgResponseTime: number;
-    successRate: number;
-    totalRequests: number;
-  };
-}
-
-export interface PluginLifecycleEvents {
-  'state-changed': (pluginId: string, state: PluginLifecycleState) => void;
-  'dependency-resolved': (pluginId: string, dependency: PluginDependency) => void;
-  'dependency-failed': (pluginId: string, dependency: PluginDependency) => void;
-  'health-check': (pluginId: string, health: PluginHealthStatus) => void;
-  'update-available': (pluginId: string, updateInfo: PluginUpdateInfo) => void;
-  'error': (pluginId: string, error: Error) => void;
-  'recovery-attempted': (pluginId: string, success: boolean) => void;
-}
-
-export class PluginLifecycleManager extends EventEmitter<PluginLifecycleEvents> {
-  private pluginStates = new Map<string, PluginLifecycleState>();
-  private pluginDependencies = new Map<string, PluginDependency[]>();
-  private pluginHealth = new Map<string, PluginHealthStatus>();
-  private healthCheckInterval: NodeJS.Timeout | null = null;
-  private updateCheckInterval: NodeJS.Timeout | null = null;
-  private recoveryAttempts = new Map<string, number>();
-  private readonly maxRecoveryAttempts = 3;
-  private readonly healthCheckIntervalMs = 30000; // 30 seconds
-  private readonly updateCheckIntervalMs = 300000; // 5 minutes
-
-  constructor(
-    private pluginManager: PluginManager,
-    private pluginSandbox: PluginSandbox,
-    private eventLogger: SecurityEventLogger,
-    private healthMonitor: HealthMonitor
-  ) {
-    super();
-    this.setupEventListeners();
+    avgResponseTime: number
+    successRate: number
+    totalRequests: number
   }
+}
 
-  async initialize(): Promise<void> {
-    console.log('Initializing Plugin Lifecycle Manager...');
+export interface PluginUpdateInfo {
+  currentVersion: string
+  availableVersion: string
+  changelog?: string
+  critical: boolean
+  downloadUrl: string
+  signature?: string
+}
+
+export interface PluginInstance {
+  id: string
+  name: string
+  version: string
+  path: string
+  manifest: PluginManifest
+  state: PluginState
+  dependencies: PluginDependency[]
+  healthStatus: PluginHealthStatus
+  lastStateChange: Date
+  recoveryAttempts: number
+}
+
+export interface PluginManifest {
+  id: string
+  name: string
+  version: string
+  description: string
+  author: string
+  main: string
+  dependencies?: Record<string, string>
+  permissions?: string[]
+  hooks?: Record<string, string>
+}
+
+export interface PluginLifecycleConfig {
+  pluginDirectory: string
+  maxRecoveryAttempts: number
+  healthCheckInterval: number
+  updateCheckInterval: number
+  enableAutoRecovery: boolean
+  enableAutoUpdates: boolean
+}
+
+/**
+ * Comprehensive Plugin Lifecycle Manager
+ * Handles advanced plugin lifecycle states, dependency resolution,
+ * health monitoring, and automated recovery mechanisms
+ */
+export class PluginLifecycleManager extends EventEmitter {
+  private plugins: Map<string, PluginInstance> = new Map()
+  private lifecycleStates: Map<string, PluginState> = new Map()
+  private healthCheckTimer?: NodeJS.Timeout
+  private updateCheckTimer?: NodeJS.Timeout
+  private config: PluginLifecycleConfig
+
+  constructor(config?: Partial<PluginLifecycleConfig>) {
+    super()
     
-    // Initialize existing plugins
-    const plugins = this.pluginManager.list();
-    for (const plugin of plugins) {
-      await this.initializePluginState(plugin);
+    this.config = {
+      pluginDirectory: path.join(app.getPath('userData'), 'plugins'),
+      maxRecoveryAttempts: 3,
+      healthCheckInterval: 30000, // 30 seconds
+      updateCheckInterval: 300000, // 5 minutes
+      enableAutoRecovery: true,
+      enableAutoUpdates: false,
+      ...config
     }
 
-    // Start health monitoring
-    this.startHealthMonitoring();
-    
-    // Start update checking
-    this.startUpdateChecking();
+    this.initializePluginDirectory()
+    this.startMonitoring()
+  }
 
-    this.eventLogger.log({
-      type: 'security',
-      severity: 'low',
-      description: 'Plugin Lifecycle Manager initialized',
-      timestamp: new Date(),
-      details: {
-        managedPlugins: this.pluginStates.size,
-        healthCheckInterval: this.healthCheckIntervalMs,
-        updateCheckInterval: this.updateCheckIntervalMs
+  /**
+   * Install a plugin from a local path or URL
+   */
+  async installPlugin(pluginPath: string): Promise<void> {
+    const pluginId = path.basename(pluginPath, '.zip')
+    
+    try {
+      this.setPluginState(pluginId, PluginState.INSTALLING)
+      this.emit('plugin-installing', { pluginId, path: pluginPath })
+
+      // Extract and validate plugin
+      const extractedPath = await this.extractPlugin(pluginPath, pluginId)
+      const manifest = await this.validatePluginManifest(extractedPath)
+      
+      // Check dependencies
+      const dependencies = await this.resolveDependencies(manifest.dependencies || {})
+      
+      // Create plugin instance
+      const pluginInstance: PluginInstance = {
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        path: extractedPath,
+        manifest,
+        state: PluginState.STOPPED,
+        dependencies,
+        healthStatus: this.createInitialHealthStatus(),
+        lastStateChange: new Date(),
+        recoveryAttempts: 0
       }
-    });
+
+      this.plugins.set(pluginInstance.id, pluginInstance)
+      this.setPluginState(pluginInstance.id, PluginState.STOPPED)
+      
+      this.emit('plugin-installed', { pluginId: pluginInstance.id, plugin: pluginInstance })
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.emit('plugin-error', { pluginId, error: errorMessage, operation: 'install' })
+      throw error
+    }
   }
 
-  private setupEventListeners(): void {
-    this.on('state-changed', (pluginId, state) => {
-      this.eventLogger.log({
-        type: 'security',
-        severity: state.state === 'error' ? 'high' : 'low',
-        description: `Plugin ${pluginId} state changed to ${state.state}`,
-        timestamp: new Date(),
-        details: { pluginId, state: state.state, previousState: state.previousState }
-      });
-    });
+  /**
+   * Start a plugin
+   */
+  async startPlugin(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin ${pluginId} not found`)
+    }
 
-    this.on('error', (pluginId, error) => {
-      this.handlePluginError(pluginId, error);
-    });
+    if (plugin.state === PluginState.RUNNING) {
+      return // Already running
+    }
+
+    try {
+      this.setPluginState(pluginId, PluginState.STARTING)
+      this.emit('plugin-starting', { pluginId, plugin })
+
+      // Check dependencies are satisfied
+      const unsatisfiedDeps = plugin.dependencies.filter(dep => !dep.satisfied)
+      if (unsatisfiedDeps.length > 0) {
+        throw new Error(`Unsatisfied dependencies: ${unsatisfiedDeps.map(d => d.pluginId).join(', ')}`)
+      }
+
+      // Load and initialize plugin
+      await this.loadPlugin(plugin)
+      
+      plugin.healthStatus.uptime = Date.now()
+      plugin.recoveryAttempts = 0
+      
+      this.setPluginState(pluginId, PluginState.RUNNING)
+      this.emit('plugin-started', { pluginId, plugin })
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      plugin.healthStatus.errors++
+      plugin.healthStatus.lastError = errorMessage
+      
+      this.setPluginState(pluginId, PluginState.ERROR)
+      this.emit('plugin-error', { pluginId, error: errorMessage, operation: 'start' })
+      
+      // Attempt recovery if enabled
+      if (this.config.enableAutoRecovery) {
+        this.attemptRecovery(pluginId)
+      }
+      
+      throw error
+    }
   }
 
-  private async initializePluginState(plugin: PluginData): Promise<void> {
-    const initialState: PluginLifecycleState = {
-      state: plugin.enabled ? 'running' : 'stopped',
-      timestamp: new Date(),
-      details: { initialized: true }
-    };
+  /**
+   * Stop a plugin
+   */
+  async stopPlugin(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin ${pluginId} not found`)
+    }
 
-    this.pluginStates.set(plugin.id, initialState);
+    if (plugin.state === PluginState.STOPPED) {
+      return // Already stopped
+    }
+
+    try {
+      this.setPluginState(pluginId, PluginState.STOPPING)
+      this.emit('plugin-stopping', { pluginId, plugin })
+
+      // Check if other plugins depend on this one
+      const dependentPlugins = this.findDependentPlugins(pluginId)
+      if (dependentPlugins.length > 0) {
+        const running = dependentPlugins.filter(p => p.state === PluginState.RUNNING)
+        if (running.length > 0) {
+          throw new Error(`Cannot stop plugin: ${running.map(p => p.id).join(', ')} depend on it`)
+        }
+      }
+
+      // Unload plugin
+      await this.unloadPlugin(plugin)
+      
+      this.setPluginState(pluginId, PluginState.STOPPED)
+      this.emit('plugin-stopped', { pluginId, plugin })
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      plugin.healthStatus.errors++
+      plugin.healthStatus.lastError = errorMessage
+      
+      this.setPluginState(pluginId, PluginState.ERROR)
+      this.emit('plugin-error', { pluginId, error: errorMessage, operation: 'stop' })
+      
+      throw error
+    }
+  }
+
+  /**
+   * Update a plugin to the latest version
+   */
+  async updatePlugin(pluginId: string, force: boolean = false): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin ${pluginId} not found`)
+    }
+
+    try {
+      this.setPluginState(pluginId, PluginState.UPDATING)
+      this.emit('plugin-updating', { pluginId, plugin })
+
+      const updateInfo = await this.checkForUpdates(pluginId)
+      if (!updateInfo && !force) {
+        this.setPluginState(pluginId, plugin.state)
+        return // No update available
+      }
+
+      // Create backup before update
+      const backupPath = await this.createBackup(plugin)
+      
+      try {
+        // Download and install update
+        const newPluginPath = await this.downloadUpdate(updateInfo!)
+        await this.installUpdate(plugin, newPluginPath)
+        
+        // Remove backup on success
+        await fs.remove(backupPath)
+        
+        this.emit('plugin-updated', { pluginId, plugin, previousVersion: updateInfo!.currentVersion })
+        
+      } catch (updateError) {
+        // Rollback on failure
+        await this.rollbackUpdate(plugin, backupPath)
+        throw updateError
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      plugin.healthStatus.errors++
+      plugin.healthStatus.lastError = errorMessage
+      
+      this.setPluginState(pluginId, PluginState.ERROR)
+      this.emit('plugin-error', { pluginId, error: errorMessage, operation: 'update' })
+      
+      throw error
+    }
+  }
+
+  /**
+   * Uninstall a plugin
+   */
+  async uninstallPlugin(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin ${pluginId} not found`)
+    }
+
+    try {
+      this.setPluginState(pluginId, PluginState.UNINSTALLING)
+      this.emit('plugin-uninstalling', { pluginId, plugin })
+
+      // Stop plugin if running
+      if (plugin.state === PluginState.RUNNING) {
+        await this.stopPlugin(pluginId)
+      }
+
+      // Check dependent plugins
+      const dependentPlugins = this.findDependentPlugins(pluginId)
+      if (dependentPlugins.length > 0) {
+        throw new Error(`Cannot uninstall: ${dependentPlugins.map(p => p.id).join(', ')} depend on it`)
+      }
+
+      // Remove plugin files
+      await fs.remove(plugin.path)
+      
+      // Remove from registry
+      this.plugins.delete(pluginId)
+      this.lifecycleStates.delete(pluginId)
+      
+      this.emit('plugin-uninstalled', { pluginId })
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      plugin.healthStatus.errors++
+      plugin.healthStatus.lastError = errorMessage
+      
+      this.setPluginState(pluginId, PluginState.ERROR)
+      this.emit('plugin-error', { pluginId, error: errorMessage, operation: 'uninstall' })
+      
+      throw error
+    }
+  }
+
+  /**
+   * Get plugin health status
+   */
+  getPluginHealth(pluginId: string): PluginHealthStatus {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin ${pluginId} not found`)
+    }
+
+    return { ...plugin.healthStatus }
+  }
+
+  /**
+   * Get all plugins
+   */
+  getAllPlugins(): PluginInstance[] {
+    return Array.from(this.plugins.values())
+  }
+
+  /**
+   * Get plugin by ID
+   */
+  getPlugin(pluginId: string): PluginInstance | undefined {
+    return this.plugins.get(pluginId)
+  }
+
+  /**
+   * Get plugins by state
+   */
+  getPluginsByState(state: PluginState): PluginInstance[] {
+    return Array.from(this.plugins.values()).filter(plugin => plugin.state === state)
+  }
+
+  /**
+   * Check for available updates
+   */
+  async checkForUpdates(_pluginId?: string): Promise<PluginUpdateInfo | null> {
+    // Implementation would integrate with plugin registry
+    // For now, return null (no updates)
+    return null
+  }
+
+  /**
+   * Get dependency graph
+   */
+  getDependencyGraph(): Record<string, string[]> {
+    const graph: Record<string, string[]> = {}
     
-    // Initialize dependencies
-    await this.resolveDependencies(plugin);
+    for (const plugin of this.plugins.values()) {
+      graph[plugin.id] = plugin.dependencies.map(dep => dep.pluginId)
+    }
     
-    // Initialize health status
-    this.pluginHealth.set(plugin.id, {
+    return graph
+  }
+
+  /**
+   * Validate dependency resolution
+   */
+  private async resolveDependencies(dependencies: Record<string, string>): Promise<PluginDependency[]> {
+    const resolved: PluginDependency[] = []
+    
+    for (const [pluginId, version] of Object.entries(dependencies)) {
+      const dependentPlugin = this.plugins.get(pluginId)
+      const satisfied = dependentPlugin && this.versionMatches(dependentPlugin.version, version)
+      
+      resolved.push({
+        pluginId,
+        version,
+        required: true,
+        satisfied: !!satisfied
+      })
+    }
+    
+    return resolved
+  }
+
+  /**
+   * Find plugins that depend on the given plugin
+   */
+  private findDependentPlugins(pluginId: string): PluginInstance[] {
+    return Array.from(this.plugins.values()).filter(plugin =>
+      plugin.dependencies.some(dep => dep.pluginId === pluginId)
+    )
+  }
+
+  /**
+   * Attempt automatic recovery for a failed plugin
+   */
+  private async attemptRecovery(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) return
+
+    if (plugin.recoveryAttempts >= this.config.maxRecoveryAttempts) {
+      this.emit('plugin-recovery-failed', { pluginId, maxAttempts: this.config.maxRecoveryAttempts })
+      return
+    }
+
+    plugin.recoveryAttempts++
+    this.emit('plugin-recovery-attempt', { pluginId, attempt: plugin.recoveryAttempts })
+
+    // Wait before retry (exponential backoff)
+    const delay = Math.pow(2, plugin.recoveryAttempts) * 1000
+    setTimeout(async () => {
+      try {
+        await this.startPlugin(pluginId)
+        this.emit('plugin-recovered', { pluginId, attempts: plugin.recoveryAttempts })
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        this.emit('plugin-recovery-failed', { pluginId, error: errorMessage })
+      }
+    }, delay)
+  }
+
+  /**
+   * Set plugin state and update timestamps
+   */
+  private setPluginState(pluginId: string, state: PluginState): void {
+    const plugin = this.plugins.get(pluginId)
+    if (plugin) {
+      plugin.state = state
+      plugin.lastStateChange = new Date()
+    }
+    
+    this.lifecycleStates.set(pluginId, state)
+    this.emit('plugin-state-changed', { pluginId, state, timestamp: new Date() })
+  }
+
+  /**
+   * Start monitoring systems
+   */
+  private startMonitoring(): void {
+    // Health monitoring
+    this.healthCheckTimer = setInterval(() => {
+      this.performHealthChecks()
+    }, this.config.healthCheckInterval)
+
+    // Update checking
+    this.updateCheckTimer = setInterval(() => {
+      if (this.config.enableAutoUpdates) {
+        this.checkAllPluginsForUpdates()
+      }
+    }, this.config.updateCheckInterval)
+  }
+
+  /**
+   * Perform health checks on all running plugins
+   */
+  private performHealthChecks(): void {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.state === PluginState.RUNNING) {
+        this.updatePluginHealth(plugin)
+      }
+    }
+  }
+
+  /**
+   * Update plugin health metrics
+   */
+  private updatePluginHealth(plugin: PluginInstance): void {
+    // Update health status based on plugin performance
+    const currentTime = Date.now()
+    const uptime = currentTime - plugin.healthStatus.uptime
+    
+    // Check if plugin is responding (simplified implementation)
+    const isHealthy = plugin.state === PluginState.RUNNING && plugin.healthStatus.errors === 0
+    
+    plugin.healthStatus.healthy = isHealthy
+    plugin.healthStatus.uptime = uptime
+
+    this.emit('plugin-health-updated', { pluginId: plugin.id, health: plugin.healthStatus })
+  }
+
+  /**
+   * Check all plugins for updates
+   */
+  private async checkAllPluginsForUpdates(): Promise<void> {
+    for (const plugin of this.plugins.values()) {
+      try {
+        const updateInfo = await this.checkForUpdates(plugin.id)
+        if (updateInfo && updateInfo.critical) {
+          await this.updatePlugin(plugin.id, true)
+        }
+      } catch (error) {
+        console.error(`Failed to check updates for plugin ${plugin.id}:`, error)
+      }
+    }
+  }
+
+  /**
+   * Initialize plugin directory structure
+   */
+  private async initializePluginDirectory(): Promise<void> {
+    await fs.ensureDir(this.config.pluginDirectory)
+  }
+
+  /**
+   * Extract plugin from archive
+   */
+  private async extractPlugin(pluginPath: string, pluginId: string): Promise<string> {
+    const extractPath = path.join(this.config.pluginDirectory, pluginId)
+    
+    // Implementation would extract ZIP/TAR files
+    // For now, assume it's already extracted
+    await fs.ensureDir(extractPath)
+    
+    return extractPath
+  }
+
+  /**
+   * Validate plugin manifest
+   */
+  private async validatePluginManifest(pluginPath: string): Promise<PluginManifest> {
+    const manifestPath = path.join(pluginPath, 'manifest.json')
+    
+    if (!await fs.pathExists(manifestPath)) {
+      throw new Error('Plugin manifest.json not found')
+    }
+
+    const manifest = await fs.readJSON(manifestPath)
+    
+    // Validate required fields
+    const required = ['id', 'name', 'version', 'main']
+    for (const field of required) {
+      if (!manifest[field]) {
+        throw new Error(`Missing required field: ${field}`)
+      }
+    }
+
+    return manifest
+  }
+
+  /**
+   * Load plugin into runtime
+   */
+  private async loadPlugin(plugin: PluginInstance): Promise<void> {
+    // Implementation would load plugin module and initialize
+    // This is a simplified placeholder
+    const mainFile = path.join(plugin.path, plugin.manifest.main)
+    
+    if (!await fs.pathExists(mainFile)) {
+      throw new Error(`Plugin main file not found: ${plugin.manifest.main}`)
+    }
+
+    // Plugin loading logic would go here
+    console.log(`Loading plugin: ${plugin.id}`)
+  }
+
+  /**
+   * Unload plugin from runtime
+   */
+  private async unloadPlugin(plugin: PluginInstance): Promise<void> {
+    // Implementation would unload plugin module and cleanup
+    console.log(`Unloading plugin: ${plugin.id}`)
+  }
+
+  /**
+   * Create backup of plugin before update
+   */
+  private async createBackup(plugin: PluginInstance): Promise<string> {
+    const backupPath = path.join(this.config.pluginDirectory, 'backups', `${plugin.id}-${Date.now()}`)
+    await fs.copy(plugin.path, backupPath)
+    return backupPath
+  }
+
+  /**
+   * Download plugin update
+   */
+  private async downloadUpdate(updateInfo: PluginUpdateInfo): Promise<string> {
+    // Implementation would download from registry
+    // Return path to downloaded update
+    return updateInfo.downloadUrl
+  }
+
+  /**
+   * Install plugin update
+   */
+  private async installUpdate(plugin: PluginInstance, _updatePath: string): Promise<void> {
+    // Implementation would replace plugin files with update
+    console.log(`Installing update for plugin: ${plugin.id}`)
+  }
+
+  /**
+   * Rollback plugin update
+   */
+  private async rollbackUpdate(plugin: PluginInstance, backupPath: string): Promise<void> {
+    await fs.remove(plugin.path)
+    await fs.copy(backupPath, plugin.path)
+  }
+
+  /**
+   * Create initial health status
+   */
+  private createInitialHealthStatus(): PluginHealthStatus {
+    return {
       healthy: true,
       uptime: 0,
       memoryUsage: 0,
@@ -145,529 +642,33 @@ export class PluginLifecycleManager extends EventEmitter<PluginLifecycleEvents> 
         successRate: 100,
         totalRequests: 0
       }
-    });
-  }
-
-  async installPlugin(pluginPath: string): Promise<void> {
-    try {
-      const pluginId = path.basename(pluginPath, path.extname(pluginPath));
-      
-      // Set installing state
-      await this.updatePluginState(pluginId, 'installing');
-      
-      // Install via plugin manager
-      const plugin = await this.pluginManager.install(pluginPath);
-      
-      // Initialize lifecycle state
-      await this.initializePluginState(plugin);
-      
-      // Check dependencies
-      const dependenciesOk = await this.checkDependencies(plugin.id);
-      if (!dependenciesOk) {
-        await this.updatePluginState(plugin.id, 'error', {
-          error: 'Dependency resolution failed'
-        });
-        return;
-      }
-      
-      // Set to stopped (installed but not started)
-      await this.updatePluginState(plugin.id, 'stopped');
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.eventLogger.log({
-        type: 'security',
-        severity: 'high',
-        description: `Plugin installation failed: ${errorMessage}`,
-        timestamp: new Date(),
-        details: { pluginPath, error: errorMessage }
-      });
-      throw error;
     }
   }
 
-  async startPlugin(pluginId: string): Promise<void> {
-    const plugin = this.pluginManager.get(pluginId);
-    if (!plugin) {
-      throw new Error(`Plugin ${pluginId} not found`);
-    }
-
-    try {
-      // Set starting state
-      await this.updatePluginState(pluginId, 'starting');
-      
-      // Check dependencies
-      const dependenciesOk = await this.checkDependencies(pluginId);
-      if (!dependenciesOk) {
-        await this.updatePluginState(pluginId, 'error', {
-          error: 'Dependencies not satisfied'
-        });
-        return;
-      }
-      
-      // Enable plugin
-      await this.pluginManager.enable(pluginId);
-      
-      // Initialize plugin in sandbox
-      await this.initializePluginInSandbox(plugin);
-      
-      // Set running state
-      await this.updatePluginState(pluginId, 'running');
-      
-      // Reset recovery attempts
-      this.recoveryAttempts.delete(pluginId);
-      
-    } catch (error) {
-      await this.updatePluginState(pluginId, 'error', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
+  /**
+   * Check if version matches requirement
+   */
+  private versionMatches(installed: string, required: string): boolean {
+    // Simplified version matching - would use semver in real implementation
+    return installed === required
   }
 
-  async stopPlugin(pluginId: string): Promise<void> {
-    const plugin = this.pluginManager.get(pluginId);
-    if (!plugin) {
-      throw new Error(`Plugin ${pluginId} not found`);
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer)
     }
-
-    try {
-      // Set stopping state
-      await this.updatePluginState(pluginId, 'stopping');
-      
-      // Cleanup plugin resources
-      await this.cleanupPluginResources(pluginId);
-      
-      // Disable plugin
-      await this.pluginManager.disable(pluginId);
-      
-      // Set stopped state
-      await this.updatePluginState(pluginId, 'stopped');
-      
-    } catch (error) {
-      await this.updatePluginState(pluginId, 'error', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-
-  async updatePlugin(pluginId: string, updateInfo: PluginUpdateInfo): Promise<void> {
-    const plugin = this.pluginManager.get(pluginId);
-    if (!plugin) {
-      throw new Error(`Plugin ${pluginId} not found`);
-    }
-
-    try {
-      // Set updating state
-      await this.updatePluginState(pluginId, 'updating');
-      
-      // Stop plugin if running
-      const currentState = this.pluginStates.get(pluginId);
-      const wasRunning = currentState?.state === 'running';
-      
-      if (wasRunning) {
-        await this.stopPlugin(pluginId);
-      }
-      
-      // Download and verify update
-      const updatePath = await this.downloadPluginUpdate(updateInfo);
-      
-      // Backup current plugin
-      const backupPath = await this.backupPlugin(pluginId);
-      
-      try {
-        // Install update
-        await this.installPlugin(updatePath);
-        
-        // Restart if it was running
-        if (wasRunning) {
-          await this.startPlugin(pluginId);
-        }
-        
-        // Cleanup backup
-        await fs.remove(backupPath);
-        
-      } catch (error) {
-        // Rollback on failure
-        await this.rollbackPlugin(pluginId, backupPath);
-        throw error;
-      }
-      
-    } catch (error) {
-      await this.updatePluginState(pluginId, 'error', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-
-  async uninstallPlugin(pluginId: string): Promise<void> {
-    try {
-      // Set uninstalling state
-      await this.updatePluginState(pluginId, 'uninstalling');
-      
-      // Stop plugin if running
-      const currentState = this.pluginStates.get(pluginId);
-      if (currentState?.state === 'running') {
-        await this.stopPlugin(pluginId);
-      }
-      
-      // Check for dependent plugins
-      const dependents = await this.findDependentPlugins(pluginId);
-      if (dependents.length > 0) {
-        throw new Error(`Cannot uninstall plugin ${pluginId}: ${dependents.length} plugins depend on it`);
-      }
-      
-      // Cleanup resources
-      await this.cleanupPluginResources(pluginId);
-      
-      // Uninstall via plugin manager
-      await this.pluginManager.uninstall(pluginId);
-      
-      // Cleanup lifecycle state
-      this.pluginStates.delete(pluginId);
-      this.pluginDependencies.delete(pluginId);
-      this.pluginHealth.delete(pluginId);
-      this.recoveryAttempts.delete(pluginId);
-      
-    } catch (error) {
-      await this.updatePluginState(pluginId, 'error', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-
-  private async resolveDependencies(plugin: PluginData): Promise<void> {
-    const dependencies: PluginDependency[] = [];
-    
-    // Parse dependencies from manifest
-    if (plugin.manifest?.dependencies) {
-      for (const [depId, version] of Object.entries(plugin.manifest.dependencies)) {
-        const depPlugin = this.pluginManager.get(depId);
-        const satisfied = depPlugin !== undefined && this.isVersionSatisfied(depPlugin.version, version);
-        
-        const dependency: PluginDependency = {
-          pluginId: depId,
-          version,
-          required: true,
-          satisfied
-        };
-        
-        dependencies.push(dependency);
-        
-        if (satisfied) {
-          this.emit('dependency-resolved', plugin.id, dependency);
-        } else {
-          this.emit('dependency-failed', plugin.id, dependency);
-        }
-      }
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer)
     }
     
-    this.pluginDependencies.set(plugin.id, dependencies);
+    this.removeAllListeners()
   }
+}
 
-  private async checkDependencies(pluginId: string): Promise<boolean> {
-    const dependencies = this.pluginDependencies.get(pluginId) || [];
-    
-    for (const dependency of dependencies) {
-      if (dependency.required && !dependency.satisfied) {
-        return false;
-      }
-    }
-    
-    return true;
-  }
-
-  private async findDependentPlugins(pluginId: string): Promise<string[]> {
-    const dependents: string[] = [];
-    
-    for (const [id, dependencies] of this.pluginDependencies) {
-      if (dependencies.some(dep => dep.pluginId === pluginId && dep.required)) {
-        dependents.push(id);
-      }
-    }
-    
-    return dependents;
-  }
-
-  private isVersionSatisfied(currentVersion: string, requiredVersion: string): boolean {
-    // Simple version comparison - in production, use semver
-    return currentVersion >= requiredVersion;
-  }
-
-  private async initializePluginInSandbox(plugin: PluginData): Promise<void> {
-    const pluginDir = path.join(PlatformUtils.getPluginsPath(), plugin.id);
-    const mainFile = path.join(pluginDir, plugin.manifest?.main || 'index.js');
-    
-    if (await fs.pathExists(mainFile)) {
-      const pluginCode = await fs.readFile(mainFile, 'utf8');
-      
-      const result = await this.pluginSandbox.executePlugin(
-        plugin.id,
-        pluginCode,
-        plugin.manifest!,
-        { initialize: true }
-      );
-      
-      if (!result.success) {
-        throw new Error(`Plugin initialization failed: ${result.error}`);
-      }
-    }
-  }
-
-  private async cleanupPluginResources(pluginId: string): Promise<void> {
-    // Cleanup sandbox resources
-    // In a real implementation, this would cleanup active sandbox instances
-    
-    // Cleanup temporary files
-    const tempDir = path.join(PlatformUtils.getPluginsPath(), `${pluginId}_temp`);
-    if (await fs.pathExists(tempDir)) {
-      await fs.remove(tempDir);
-    }
-  }
-
-  private async downloadPluginUpdate(updateInfo: PluginUpdateInfo): Promise<string> {
-    // In a real implementation, this would download from updateInfo.downloadUrl
-    // For now, return a placeholder path
-    return '/tmp/plugin-update.zip';
-  }
-
-  private async backupPlugin(pluginId: string): Promise<string> {
-    const pluginDir = path.join(PlatformUtils.getPluginsPath(), pluginId);
-    const backupDir = path.join(PlatformUtils.getPluginsPath(), `${pluginId}_backup_${Date.now()}`);
-    
-    await fs.copy(pluginDir, backupDir);
-    return backupDir;
-  }
-
-  private async rollbackPlugin(pluginId: string, backupPath: string): Promise<void> {
-    const pluginDir = path.join(PlatformUtils.getPluginsPath(), pluginId);
-    
-    // Remove failed update
-    if (await fs.pathExists(pluginDir)) {
-      await fs.remove(pluginDir);
-    }
-    
-    // Restore backup
-    await fs.copy(backupPath, pluginDir);
-    
-    // Cleanup backup
-    await fs.remove(backupPath);
-  }
-
-  private async updatePluginState(
-    pluginId: string,
-    state: PluginLifecycleState['state'],
-    details?: Record<string, any>
-  ): Promise<void> {
-    const previousState = this.pluginStates.get(pluginId);
-    
-    const newState: PluginLifecycleState = {
-      state,
-      previousState: previousState?.state,
-      timestamp: new Date(),
-      details
-    };
-    
-    this.pluginStates.set(pluginId, newState);
-    this.emit('state-changed', pluginId, newState);
-  }
-
-  private startHealthMonitoring(): void {
-    this.healthCheckInterval = setInterval(async () => {
-      await this.performHealthChecks();
-    }, this.healthCheckIntervalMs);
-  }
-
-  private startUpdateChecking(): void {
-    this.updateCheckInterval = setInterval(async () => {
-      await this.checkForUpdates();
-    }, this.updateCheckIntervalMs);
-  }
-
-  private async performHealthChecks(): Promise<void> {
-    for (const [pluginId, state] of this.pluginStates) {
-      if (state.state === 'running') {
-        await this.checkPluginHealth(pluginId);
-      }
-    }
-  }
-
-  private async checkPluginHealth(pluginId: string): Promise<void> {
-    const plugin = this.pluginManager.get(pluginId);
-    if (!plugin) return;
-
-    try {
-      const health = this.pluginHealth.get(pluginId);
-      if (!health) return;
-
-      // Update health metrics
-      health.uptime = Date.now() - (this.pluginStates.get(pluginId)?.timestamp.getTime() || 0);
-      
-      // Check if plugin is responsive
-      const isHealthy = await this.pingPlugin(pluginId);
-      
-      if (!isHealthy && health.healthy) {
-        // Plugin became unhealthy
-        health.healthy = false;
-        health.errors++;
-        
-        this.emit('health-check', pluginId, health);
-        
-        // Attempt recovery
-        await this.attemptPluginRecovery(pluginId);
-      } else if (isHealthy && !health.healthy) {
-        // Plugin recovered
-        health.healthy = true;
-        this.emit('health-check', pluginId, health);
-      }
-      
-    } catch (error) {
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-
-  private async pingPlugin(pluginId: string): Promise<boolean> {
-    try {
-      const plugin = this.pluginManager.get(pluginId);
-      if (!plugin) return false;
-
-      const pluginDir = path.join(PlatformUtils.getPluginsPath(), pluginId);
-      const healthCheckCode = `
-        try {
-          if (typeof healthCheck === 'function') {
-            healthCheck();
-          }
-          'healthy';
-        } catch (error) {
-          'unhealthy';
-        }
-      `;
-
-      const result = await this.pluginSandbox.executePlugin(
-        pluginId,
-        healthCheckCode,
-        plugin.manifest!,
-        { healthCheck: true }
-      );
-
-      return result.success && result.result === 'healthy';
-    } catch (error) {
-      return false;
-    }
-  }
-
-  private async attemptPluginRecovery(pluginId: string): Promise<void> {
-    const attempts = this.recoveryAttempts.get(pluginId) || 0;
-    
-    if (attempts >= this.maxRecoveryAttempts) {
-      this.eventLogger.log({
-        type: 'security',
-        severity: 'high',
-        description: `Plugin ${pluginId} max recovery attempts reached`,
-        timestamp: new Date(),
-        details: { pluginId, attempts }
-      });
-      
-      await this.updatePluginState(pluginId, 'error', {
-        error: 'Max recovery attempts reached'
-      });
-      return;
-    }
-    
-    try {
-      this.recoveryAttempts.set(pluginId, attempts + 1);
-      
-      // Try to restart the plugin
-      await this.stopPlugin(pluginId);
-      await this.startPlugin(pluginId);
-      
-      this.emit('recovery-attempted', pluginId, true);
-      
-    } catch (error) {
-      this.emit('recovery-attempted', pluginId, false);
-      this.emit('error', pluginId, error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-
-  private async checkForUpdates(): Promise<void> {
-    // In a real implementation, this would check a plugin registry
-    // For now, just log that update checking is active
-    this.eventLogger.log({
-      type: 'security',
-      severity: 'low',
-      description: 'Plugin update check completed',
-      timestamp: new Date(),
-      details: { pluginCount: this.pluginStates.size }
-    });
-  }
-
-  private async handlePluginError(pluginId: string, error: Error): Promise<void> {
-    const health = this.pluginHealth.get(pluginId);
-    if (health) {
-      health.errors++;
-      health.lastError = error.message;
-      health.healthy = false;
-    }
-    
-    this.eventLogger.log({
-      type: 'security',
-      severity: 'high',
-      description: `Plugin error: ${pluginId}`,
-      timestamp: new Date(),
-      details: {
-        pluginId,
-        error: error.message,
-        stack: error.stack
-      }
-    });
-    
-    // Attempt recovery
-    await this.attemptPluginRecovery(pluginId);
-  }
-
-  // Public API methods
-  
-  getPluginState(pluginId: string): PluginLifecycleState | undefined {
-    return this.pluginStates.get(pluginId);
-  }
-
-  getPluginDependencies(pluginId: string): PluginDependency[] {
-    return this.pluginDependencies.get(pluginId) || [];
-  }
-
-  getPluginHealth(pluginId: string): PluginHealthStatus | undefined {
-    return this.pluginHealth.get(pluginId);
-  }
-
-  getAllPluginStates(): Map<string, PluginLifecycleState> {
-    return new Map(this.pluginStates);
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
-    
-    if (this.updateCheckInterval) {
-      clearInterval(this.updateCheckInterval);
-    }
-    
-    // Stop all running plugins
-    for (const [pluginId, state] of this.pluginStates) {
-      if (state.state === 'running') {
-        await this.stopPlugin(pluginId);
-      }
-    }
-    
-    this.eventLogger.log({
-      type: 'security',
-      severity: 'low',
-      description: 'Plugin Lifecycle Manager shutdown completed',
-      timestamp: new Date(),
-      details: {}
-    });
-  }
+// Register service with factory
+export function createPluginLifecycleManager(config?: Partial<PluginLifecycleConfig>): PluginLifecycleManager {
+  return new PluginLifecycleManager(config)
 }

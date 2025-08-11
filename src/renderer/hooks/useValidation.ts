@@ -50,7 +50,7 @@ export interface FormValidationHook<T extends Record<string, unknown>> {
 
 export function useValidation<T extends Record<string, unknown>>(
   initialValues: T,
-  fieldConfigs: Record<keyof T, FieldConfig<T[keyof T]>> = {}
+  fieldConfigs: Partial<Record<keyof T, FieldConfig<T[keyof T]>>> = {} as Partial<Record<keyof T, FieldConfig<T[keyof T]>>>
 ): FormValidationHook<T> {
   const [values, setValuesState] = useState<T>(initialValues);
   const [errors, setErrorsState] = useState<Record<string, string[]>>({});
@@ -152,7 +152,7 @@ export function useValidation<T extends Record<string, unknown>>(
     let hasErrors = false;
 
     for (const [key, value] of Object.entries(values)) {
-      const fieldErrors = await validateField(key as keyof T, value);
+      const fieldErrors = await validateField(key as keyof T, value as T[keyof T]);
       newErrors[key] = fieldErrors;
       if (fieldErrors.length > 0) {
         hasErrors = true;
@@ -194,15 +194,15 @@ export function useValidation<T extends Record<string, unknown>>(
   }, [initialValues]);
 
   const hasError = useCallback((field: keyof T) => {
-    return Boolean(errors[field]?.length);
+    return Boolean(errors[String(field)]?.length);
   }, [errors]);
 
   const getError = useCallback((field: keyof T) => {
-    return errors[field]?.[0];
+    return errors[String(field)]?.[0];
   }, [errors]);
 
   const getErrors = useCallback((field: keyof T) => {
-    return errors[field] || [];
+    return errors[String(field)] || [];
   }, [errors]);
 
   return {

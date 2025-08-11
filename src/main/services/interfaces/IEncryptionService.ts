@@ -80,7 +80,7 @@ export interface IEncryptionService {
   // Security operations
   secureDelete(data: Buffer): Promise<void>;
   secureRandom(length: number): Promise<Buffer>;
-  constant TimeComparison(a: Buffer, b: Buffer): boolean;
+  constantTimeComparison(a: Buffer, b: Buffer): boolean;
 
   // Key validation and verification
   validateKey(key: EncryptionKey): Promise<boolean>;

@@ -57,18 +57,45 @@ PJai's is built with modern technologies:
 - **Electron**: Cross-platform desktop application framework
 - **React 19**: Modern UI with TypeScript
 - **Material-UI**: Component library and theming
-- **Effect**: Functional programming for error handling
-- **SQLite**: Local database with connection pooling
+- **better-sqlite3**: High-performance SQLite database with WAL mode
+- **Drizzle ORM**: Type-safe database operations and migrations
+- **TanStack Query**: Data fetching and caching for React
 - **D3.js**: Advanced data visualization
 - **Vite**: Fast build tooling
 
+## Database Migration
+
+This application has been migrated from LiveStore to better-sqlite3 for improved performance and reliability. The migration process:
+
+- **Automatic Detection**: Existing LiveStore databases are automatically detected on startup
+- **Safe Migration**: Data is backed up before migration begins
+- **Schema Validation**: All data is validated using Zod schemas during migration
+- **Rollback Support**: Migration can be rolled back if issues occur
+- **No Data Loss**: Preserves all personas, memories, and plugin configurations
+
+For detailed migration information, see [MIGRATION.md](MIGRATION.md).
+
 ## Project Structure
 
+```
 src/
-├── main/           # Electron main process
-├── renderer/       # React UI components
-├── preload/        # IPC bridge
-└── shared/         # Shared types and utilities
+├── main/              # Electron main process
+│   ├── database/      # SQLite database layer
+│   │   ├── db.ts             # Database connection and setup
+│   │   ├── schema.ts         # Drizzle ORM schema definitions
+│   │   ├── sqlite-database-manager.ts  # CRUD operations
+│   │   └── data-migration.ts # Migration from LiveStore
+│   ├── ipc/           # IPC handlers for renderer communication
+│   └── index.ts       # Main process entry point
+├── renderer/          # React UI components
+│   └── hooks/         # React Query hooks for data access
+├── preload/           # IPC bridge between main and renderer
+├── shared/            # Shared types and utilities
+│   ├── types/         # TypeScript type definitions
+│   └── ipc-contracts.ts  # IPC channel definitions
+├── migrations/        # Database migration SQL files
+└── test-utils/        # Testing utilities
+```
 
 ## Contributing
 

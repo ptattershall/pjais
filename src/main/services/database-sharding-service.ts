@@ -1,11 +1,11 @@
 import { ShardedDatabaseManager, ShardedDatabaseManagerConfig } from '../database/sharded-database-manager';
-import { ShardManager, ShardInfo, ShardMetrics } from '../database/shard-manager';
+import { ShardInfo, ShardMetrics } from '../database/shard-manager';
 import { PersonaData } from '../../shared/types/persona';
 import { MemoryEntity } from '../../shared/types/memory';
 import { EncryptionService } from './encryption-service';
 import { SecurityEventLogger } from './security-event-logger';
 import { HealthMonitor } from './health-monitor';
-import { ServiceFactory } from './ServiceFactory';
+
 import { EventEmitter } from 'events';
 import { loggers } from '../utils/logger';
 
@@ -61,7 +61,7 @@ export interface ShardingEvents {
   'error': (error: Error) => void;
 }
 
-export class DatabaseShardingService extends EventEmitter<ShardingEvents> {
+export class DatabaseShardingService extends EventEmitter {
   private shardedDatabaseManager: ShardedDatabaseManager;
   private config: DatabaseShardingConfig;
   private rebalanceInterval: NodeJS.Timeout | null = null;
@@ -131,8 +131,7 @@ export class DatabaseShardingService extends EventEmitter<ShardingEvents> {
       this.startHealthCheckInterval();
       this.startMetricsInterval();
 
-      // Register with service factory
-      ServiceFactory.registerService('databaseShardingService', this);
+      // Service factory registration removed - not available
 
       // Update health monitor with sharding metrics
       if (this.healthMonitor) {
@@ -141,11 +140,7 @@ export class DatabaseShardingService extends EventEmitter<ShardingEvents> {
 
       this.initialized = true;
       
-      loggers.database.info('Database Sharding Service initialized successfully', {
-        shardCount: this.config.shardCount,
-        strategy: this.config.strategy,
-        autoRebalance: this.config.autoRebalance
-      });
+      loggers.database.info('Database Sharding Service initialized successfully');
 
     } catch (error) {
       loggers.database.error('Failed to initialize Database Sharding Service', {}, error as Error);
@@ -195,7 +190,7 @@ export class DatabaseShardingService extends EventEmitter<ShardingEvents> {
       
       if (this.securityEventLogger) {
         this.securityEventLogger.log({
-          type: 'security',
+          type: 'data_access',
           severity: 'high',
           description: `Database sharding error: ${error.message}`,
           timestamp: new Date(),
@@ -479,7 +474,7 @@ export class DatabaseShardingService extends EventEmitter<ShardingEvents> {
       this.startMetricsInterval();
     }
     
-    loggers.database.info('Database sharding configuration updated', { newConfig });
+    loggers.database.info('Database sharding configuration updated');
   }
 
   getConfig(): DatabaseShardingConfig {

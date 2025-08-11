@@ -10,6 +10,10 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Include migrations directory in packaged app
+    extraResource: [
+      './src/migrations'
+    ],
     // --- Code Signing for macOS ---
     // osxSign: {
     //   identity: 'Developer ID Application: Your Name (TEAMID)',
@@ -26,7 +30,10 @@ const config: ForgeConfig = {
     //   teamId: process.env.APPLE_TEAM_ID,
     // },
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    // Ensure native modules are rebuilt for Electron
+    onlyModules: ['better-sqlite3']
+  },
   makers: [new MakerSquirrel({
     // --- Windows Authenticode Certificate ---
     // certificateFile: './path/to/your/certificate.pfx',

@@ -390,6 +390,16 @@ export class HealthMonitor extends EventEmitter {
     loggers.service.info('Health thresholds updated', { thresholds: this.thresholds });
   }
 
+  public updateMetric(metricName: string, value: number): void {
+    // Update performance metrics
+    if (!this.metrics.performance.responseTimes[metricName]) {
+      this.metrics.performance.responseTimes[metricName] = 0;
+    }
+    this.metrics.performance.responseTimes[metricName] = value;
+    
+    loggers.service.debug('Metric updated', { metricName, value });
+  }
+
   public getOverallHealth(): 'healthy' | 'degraded' | 'unhealthy' {
     const serviceStatuses = Object.values(this.metrics.services).map(s => s.status);
     
