@@ -46,7 +46,7 @@ export class EncryptedDataManager {
     })
   }
 
-  // Encrypt sensitive fields in event data before committing to LiveStore
+  // Encrypt sensitive fields in event data before committing to the database
   async encryptEventData(tableName: string, eventData: any): Promise<any> {
     this.ensureInitialized()
     
@@ -101,7 +101,7 @@ export class EncryptedDataManager {
     }
   }
 
-  // Decrypt sensitive fields in query results from LiveStore
+  // Decrypt sensitive fields in query results from the database
   async decryptQueryData(tableName: string, queryData: any): Promise<any> {
     this.ensureInitialized()
     
