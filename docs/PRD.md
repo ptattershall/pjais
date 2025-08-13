@@ -1,13 +1,13 @@
 # Product Requirements Document (PRD)
 
 **Local AI Marketplace — Electron Desktop Application**
-**Working Title:** PajamasWeb AI Hub
+**Working Title:** PJai's
 
 ---
 
 ## 1. Overview
 
-The **PajamasWeb AI Hub** is an Electron-based desktop application that allows developers, creators, and AI enthusiasts to manage, deploy, and monetize AI Personas and Plugins **locally or in federated networks**, with privacy-first principles and deep transparency. It combines elements of a Plugin Marketplace, API Hub, Persona Manager, and Ethical AI Governance tool.
+The **PJai's** is an Electron-based desktop application that allows developers, creators, and AI enthusiasts to manage, deploy, and monetize AI Personas and Plugins **locally or in federated networks**, with privacy-first principles and deep transparency. It combines elements of a Plugin Marketplace, API Hub, Persona Manager, and Ethical AI Governance tool.
 
 The system will support offline-first local AI Personas while providing opt-in public or federated marketplaces and community features.
 
@@ -101,7 +101,8 @@ The system will support offline-first local AI Personas while providing opt-in p
 ## 5. Platform & Technical Requirements
 
 * Electron desktop app (cross-platform: Windows / Mac / Linux)
-* Local data persistence (SQLite, file-based, encrypted vaults)
+* Local data persistence (better-sqlite, file-based, encrypted vaults)
+* Note: LiveStore has been migrated to better-sqlite for improved reliability and maintainability.
 * Pluggable AI backend (Ollama, LLaMA.cpp, LM Studio, etc.)
 * Offline-first with optional cloud/federation modules
 * Public REST & WebSocket APIs

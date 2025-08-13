@@ -30,6 +30,7 @@ import {
   AccountCircle as AccountIcon,
   Notifications as NotificationsIcon
 } from '@mui/icons-material';
+import lightBlue from '../../assets/lightBlue.png';
 
 type Route = 'dashboard' | 'personas' | 'memory' | 'plugins' | 'security' | 'settings';
 
@@ -120,10 +121,30 @@ export const AppShell: React.FC<AppShellProps> = ({
   const drawer = (
     <Box sx={{ width: drawerWidth }}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
-          PJai's
-        </Typography>
-        <Chip label="v1.0" size="small" color="primary" />
+        <Box
+          sx={{
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            borderRadius: 1
+          }}
+        >
+          <img 
+            src={lightBlue} 
+            alt="PJai's Logo"
+            width="40"
+            height="40"
+          />
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
+            PJai&apos;s
+          </Typography>
+          <Chip label="v1.0" size="small" color="primary" sx={{ width: 'fit-content' }} />
+        </Box>
       </Box>
       <Divider />
       <List sx={{ pt: 1 }}>
@@ -176,7 +197,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       <Divider />
       <Box sx={{ p: 2, mt: 'auto' }}>
         <Typography variant="caption" color="text.secondary">
-          ElectronPajamas
+          PJai&apos;s
         </Typography>
         <Typography variant="caption" display="block" color="text.secondary">
           AI Memory Management
@@ -207,7 +228,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            PJai's AI Hub
+            PJai&apos;s AI Hub
           </Typography>
           
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -215,10 +236,19 @@ export const AppShell: React.FC<AppShellProps> = ({
               <NotificationsIcon />
             </IconButton>
             <IconButton
-              color="inherit"
               onClick={handleUserMenuOpen}
+              sx={{ p: 0.5 }}
             >
-              <AccountIcon />
+              <Avatar 
+                sx={{ 
+                  width: 32, 
+                  height: 32, 
+                  bgcolor: 'secondary.main',
+                  fontSize: '0.875rem'
+                }}
+              >
+                U
+              </Avatar>
             </IconButton>
           </Box>
         </Toolbar>
@@ -238,6 +268,26 @@ export const AppShell: React.FC<AppShellProps> = ({
           horizontal: 'right',
         }}
       >
+        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Avatar 
+            sx={{ 
+              width: 40, 
+              height: 40, 
+              bgcolor: 'secondary.main' 
+            }}
+          >
+            U
+          </Avatar>
+          <Box>
+            <Typography variant="subtitle2" fontWeight="bold">
+              User
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              user@example.com
+            </Typography>
+          </Box>
+        </Box>
+        <Divider />
         <MenuItem onClick={handleUserMenuClose}>
           <ListItemIcon>
             <AccountIcon fontSize="small" />
@@ -293,4 +343,4 @@ export const AppShell: React.FC<AppShellProps> = ({
       </Box>
     </Box>
   );
-}; 
+};

@@ -4,11 +4,11 @@ import {
   Typography,
   Card,
   CardContent,
-  Grid,
   Switch,
   FormControlLabel,
   Alert
 } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import {
   Settings as SettingsIcon,
   Notifications as NotificationsIcon,

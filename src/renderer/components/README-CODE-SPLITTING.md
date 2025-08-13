@@ -9,12 +9,14 @@ The code splitting implementation follows modern React best practices with Vite 
 ## Architecture
 
 ### 1. Core Components (Always Loaded)
+
 - **ErrorBoundary** - Error handling wrapper
 - **LoadingBoundary** - Suspense wrapper with loading states
 - **MetricCard** - Reusable metric display component
 - **SystemInfoCard** - System information display
 
 ### 2. Lazy-Loaded Components
+
 - **PersonaIntegrationTest** - Heavy integration test component
 - **MemoryIntegrationTest** - Memory system test component
 - **PersonalityTraitEditor** - Advanced personality editing
@@ -25,7 +27,6 @@ The code splitting implementation follows modern React best practices with Vite 
 
 ### Component Structure
 
-```
 src/renderer/components/
 ├── common/
 │   ├── ErrorBoundary.tsx        # Error boundary wrapper
@@ -48,7 +49,6 @@ src/renderer/components/
     │   └── index.ts
     ├── PersonaAdvancedPersonalityEditor.tsx        # Original (830 lines)
     └── PersonaAdvancedPersonalityEditorRefactored.tsx # Refactored
-```
 
 ### Lazy Loading Pattern
 
@@ -95,12 +95,14 @@ export default defineConfig({
 ## Performance Benefits
 
 ### Before Code Splitting
+
 - **DashboardOverview.tsx**: 1008 lines, ~45KB
 - **PersonaAdvancedPersonalityEditor.tsx**: 830 lines, ~38KB
 - **MemoryAdvancedSearchRefactored.tsx**: 716 lines, ~32KB
 - **Total large components**: ~115KB in initial bundle
 
 ### After Code Splitting
+
 - **Initial bundle**: Contains only essential components
 - **Lazy chunks**: Components loaded on-demand
 - **Reduced initial load time**: 40-60% improvement estimated
@@ -151,16 +153,19 @@ const ConditionalComponent = lazy(() => {
 ## Best Practices
 
 ### 1. Component Size Thresholds
+
 - **Lazy load components >30KB** (post-minification)
 - **Keep core components <10KB** each
 - **Monitor bundle size** with build tools
 
 ### 2. Loading States
+
 - **Always provide loading fallbacks**
 - **Use skeleton components** for better UX
 - **Implement error boundaries** for graceful failures
 
 ### 3. Chunk Organization
+
 - **Group related components** in manual chunks
 - **Separate vendor libraries** from app code
 - **Use descriptive chunk names**
@@ -204,6 +209,7 @@ export const RefactoredComponent = () => (
 ## Monitoring and Analysis
 
 ### Bundle Analysis
+
 ```bash
 # Build with analysis
 npm run build
@@ -213,6 +219,7 @@ ls -la dist-renderer/chunks/
 ```
 
 ### Performance Metrics
+
 - **Initial bundle size**: Monitor main chunk size
 - **Lazy chunk sizes**: Keep individual chunks manageable
 - **Loading performance**: Measure time to interactive
@@ -229,16 +236,19 @@ ls -la dist-renderer/chunks/
 ## Testing
 
 ### Unit Tests
+
 - Test lazy components in isolation
 - Mock React.lazy for testing
 - Test error boundary scenarios
 
 ### Integration Tests
+
 - Test loading states
 - Test error recovery
 - Test chunk loading performance
 
 ### Performance Tests
+
 - Measure bundle sizes
 - Test loading times
 - Monitor memory usage
@@ -246,6 +256,7 @@ ls -la dist-renderer/chunks/
 ## Conclusion
 
 This code splitting implementation significantly improves the application's performance by:
+
 - Reducing initial bundle size
 - Enabling on-demand loading
 - Improving caching efficiency
