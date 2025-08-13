@@ -36,8 +36,8 @@ ElectronPajamas has achieved near-complete foundation implementation with all ma
 
 ### **Database Layer** (100% Complete)
 
-- **Status**: Effect SQL operational, LiveStore ready for integration
-- **Evidence**: 446 lines DatabaseManager + connection pooling
+- **Status**: Migration to `better-sqlite3` with Effect SQL is complete. LiveStore has been fully decommissioned.
+- **Evidence**: 446 lines DatabaseManager + connection pooling. See `MIGRATION.md` for details.
 - **Features**: SQLite with WAL, foreign keys, indexes, sharding ready
 - **Quality**: Production ready
 
@@ -171,7 +171,6 @@ ElectronPajamas has achieved near-complete foundation implementation with all ma
 
 ### **Missing Implementations**
 
-- **LiveStore Integration**: Reactive UI capabilities (high impact, ready to start)
 - **Memory Explorer Refinements**: Minor UI improvements (low impact, nearly complete)
 - **Plugin SDK**: Development tools (needed for marketplace)
 
@@ -184,12 +183,7 @@ ElectronPajamas has achieved near-complete foundation implementation with all ma
    - Performance optimization
    - Final testing
 
-2. **LiveStore Integration** (3-4 weeks)
-   - Install LiveStore dependencies
-   - Implement hybrid database manager
-   - Add reactive queries to Memory Explorer
-
-3. **Component Library Completion** (1-2 weeks)
+2. **Component Library Completion** (1-2 weeks)
    - Advanced molecular components
    - Advanced patterns
    - Performance optimization
@@ -204,13 +198,7 @@ ElectronPajamas has achieved near-complete foundation implementation with all ma
 - Complete health dashboard optimization
 - Performance testing and optimization
 
-### **Week 2-3: LiveStore Integration**
-
-- Set up LiveStore dependencies
-- Implement hybrid database manager
-- Add reactive queries
-
-### **Week 4-5: Component Library Completion**
+### **Week 2-3: Component Library Completion**
 
 - Advanced molecular components
 - Performance optimization
@@ -218,4 +206,4 @@ ElectronPajamas has achieved near-complete foundation implementation with all ma
 
 ---
 
-**Note**: This status reflects the significant foundation completion achieved, including the newly completed Persona Management UI. The project is now ready to focus on LiveStore integration and final refinements.
+**Note**: This status reflects the significant foundation completion achieved, including the newly completed Persona Management UI. The project is now ready to focus on final refinements and optimizations.
