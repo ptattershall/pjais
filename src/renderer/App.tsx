@@ -5,7 +5,6 @@ import { MainRouter } from './components/layout/MainRouter';
 import { LoadingBoundary } from './components/common/LoadingBoundary';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ErrorBoundaryProvider } from './components/common/ErrorBoundaryProvider';
-import { LiveStoreProvider } from './providers/LiveStoreProvider';
 
 type Route = 'dashboard' | 'personas' | 'memory' | 'plugins' | 'security' | 'settings';
 
@@ -18,10 +17,9 @@ const App: React.FC = () => {
   };
 
   return (
-    <LiveStoreProvider>
-      <ErrorBoundaryProvider
-        onError={(error, context) => {
-          console.error('Global error handler:', error, context);
+    <ErrorBoundaryProvider
+      onError={(error, context) => {
+        console.error('Global error handler:', error, context);
           // Additional global error handling logic can be added here
         }}
       >
@@ -43,7 +41,6 @@ const App: React.FC = () => {
           </ErrorBoundary>
         </ThemeProvider>
       </ErrorBoundaryProvider>
-    </LiveStoreProvider>
   );
 };
 

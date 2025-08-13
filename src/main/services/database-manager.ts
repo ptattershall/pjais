@@ -1,6 +1,3 @@
-// import { createStorePromise } from '@livestore/livestore'
-// import { makeAdapter } from '@livestore/adapter-node'
-// import { schema, tables, events } from '../../livestore/schema'
 import { MemoryEntity } from '../../shared/types/memory'
 import { PersonaData } from '../../shared/types/persona'
 import { EncryptedDataManager } from './encrypted-storage-adapter'
