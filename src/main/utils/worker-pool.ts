@@ -54,9 +54,9 @@ export class WorkerPool {
 
   constructor(config: WorkerPoolConfig) {
     this.config = {
-      maxWorkers: Math.max(1, config.maxWorkers || os.cpus().length - 1),
       timeout: 30000, // 30 seconds default timeout
-      ...config
+      ...config,
+      maxWorkers: Math.max(1, config.maxWorkers || os.cpus().length - 1)
     };
 
     // Start with one worker
@@ -114,7 +114,7 @@ export class WorkerPool {
 
   private async createWorker(): Promise<WorkerInstance> {
     const workerId = ++this.workerIdCounter;
-    loggers.worker.info('Creating worker', { workerId, totalWorkers: this.workers.length + 1, maxWorkers: this.config.maxWorkers });
+    loggers.worker.info(`Creating worker ${workerId} (total: ${this.workers.length + 1}/${this.config.maxWorkers})`, {});
 
     const worker = new Worker(this.config.workerScript, {
       workerData: {
@@ -134,12 +134,12 @@ export class WorkerPool {
 
     // Set up error handling
     worker.on('error', (error) => {
-      loggers.worker.error('Worker error', { workerId }, error);
-      this.handleWorkerError(workerInstance, error);
+      loggers.worker.error('Worker error', { workerId: String(workerId) }, error as Error);
+      this.handleWorkerError(workerInstance, error as Error);
     });
 
     worker.on('exit', (code) => {
-      loggers.worker.info('Worker exited', { workerId, exitCode: code });
+      loggers.worker.info(`Worker ${workerId} exited with code ${code}`, {});
       this.removeWorker(workerInstance);
     });
 
@@ -194,12 +194,12 @@ export class WorkerPool {
   }
 
   private handleTaskTimeout(taskId: string): void {
-    loggers.worker.warn('Task timed out', { taskId });
+    loggers.worker.warn(`Task ${taskId} timed out`, {});
     
     // Find the worker handling this task
     const worker = this.workers.find(w => w.taskId === taskId);
     if (worker) {
-      loggers.worker.warn('Terminating worker due to timeout', { taskId, workerId: String(worker.worker.threadId) });
+      loggers.worker.warn(`Terminating worker ${worker.worker.threadId} due to timeout for task ${taskId}`, {});
       this.terminateWorker(worker);
     }
   }
@@ -257,7 +257,7 @@ export class WorkerPool {
     
     workersToRemove.forEach(worker => {
       const idleSeconds = Math.round((now.getTime() - worker.lastUsed.getTime()) / 1000);
-      loggers.worker.info('Removing idle worker', { workerId: worker.worker.threadId, idleSeconds });
+      loggers.worker.info(`Removing idle worker ${worker.worker.threadId} (idle for ${idleSeconds} seconds)`, {});
       this.terminateWorker(worker);
     });
   }
@@ -283,7 +283,7 @@ export class WorkerPool {
   }
 
   async shutdown(): Promise<void> {
-    loggers.worker.info('Shutting down worker pool', { totalWorkers: this.workers.length });
+    loggers.worker.info(`Shutting down worker pool (${this.workers.length} workers)`, {});
     this.isShuttingDown = true;
 
     // Clear health check interval

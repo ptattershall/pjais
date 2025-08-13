@@ -1,5 +1,7 @@
 // Global type definitions for the renderer process
 
+import type { RendererAPI } from '../shared/ipc-contracts';
+
 // Context menu types
 interface ContextMenuItem {
   label: string;
@@ -14,6 +16,10 @@ interface ContextMenuItem {
 
 declare global {
   interface Window {
+    // New SQLite-based API
+    api: RendererAPI;
+    
+    // Legacy Electron API
     electronAPI: {
       system: {
         getVersion(): Promise<import('@shared/types/system').SystemInfo>;
@@ -37,6 +43,7 @@ declare global {
         optimizeTiers(): Promise<any>;
         getScore(memoryId: string): Promise<any>;
         getTierMetrics(): Promise<any>;
+        getStats(): Promise<any>;
         
         // Health and monitoring
         getHealth(): Promise<any>;
@@ -78,4 +85,4 @@ declare global {
 }
 
 // This file must be a module
-export {}; 
+export {};

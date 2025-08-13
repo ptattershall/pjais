@@ -152,8 +152,16 @@ export interface IPluginManager {
 }
 
 // Events interface for plugin manager
+export interface PluginError {
+  message: string;
+  code?: string;
+  pluginId?: string;
+  stack?: string;
+  timestamp?: Date;
+}
+
 export interface PluginManagerEvents {
-  'plugin-installed': (plugin: PluginData) => void;
+  'plugin-installed': (plugin: PluginMetadata) => void;
   'plugin-uninstalled': (pluginId: string) => void;
   'plugin-enabled': (pluginId: string) => void;
   'plugin-disabled': (pluginId: string) => void;

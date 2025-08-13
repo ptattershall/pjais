@@ -225,7 +225,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
   }
 
   return (
-    <ErrorBoundary context="PersonaManagement">
+    <ErrorBoundary>
       <Box sx={{ flexGrow: 1, p: 3 }}>
         {/* Header */}
         <Box sx={{ mb: 3 }}>
@@ -248,7 +248,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
         {/* Main Content */}
         <Grid container spacing={3}>
           {/* Persona List */}
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -281,7 +281,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
           </Grid>
 
           {/* Selected Persona Details */}
-          <Grid size={{ xs: 12, md: 8 }}>
+          <Grid item xs={12} md={8}>
             {selectedPersona ? (
               <Card>
                 <CardContent>
@@ -345,11 +345,11 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                   {/* View Mode Content */}
                   <Box sx={{ mt: 2 }}>
                     {viewMode === 'dashboard' && (
-                      <AsyncErrorBoundary context="PersonaDashboard">
+                      <AsyncErrorBoundary>
                         <Box>
                           <Typography variant="h6" gutterBottom>Overview</Typography>
                           <Grid container spacing={2}>
-                            <Grid size={{ xs: 12, sm: 6 }}>
+                            <Grid item xs={12} sm={6}>
                               <Paper sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary">Personality</Typography>
                                 <Typography variant="h6">
@@ -357,7 +357,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                                 </Typography>
                               </Paper>
                             </Grid>
-                            <Grid size={{ xs: 12, sm: 6 }}>
+                            <Grid item xs={12} sm={6}>
                               <Paper sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary">Emotional State</Typography>
                                 <Typography variant="h6">
@@ -371,7 +371,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                     )}
 
                     {viewMode === 'editor' && (
-                      <AsyncErrorBoundary context="PersonaAdvancedEditor">
+                      <AsyncErrorBoundary>
                         <PersonaAdvancedEditor
                           persona={selectedPersona}
                           onPersonalityUpdate={handlePersonalityUpdate}
@@ -382,7 +382,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                     )}
 
                     {viewMode === 'behavior' && selectedPersona?.id && (
-                      <AsyncErrorBoundary context="PersonaBehaviorConfiguration">
+                      <AsyncErrorBoundary>
                         <PersonaBehaviorConfiguration
                           personaId={selectedPersona.id}
                           onUpdate={handleBehaviorUpdate}
@@ -391,7 +391,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                     )}
 
                     {viewMode === 'emotion' && selectedPersona && (
-                      <AsyncErrorBoundary context="PersonaEmotionalProfile">
+                      <AsyncErrorBoundary>
                         <PersonaEmotionalProfile
                           persona={selectedPersona}
                           onEmotionalStateUpdate={handleEmotionalStateUpdate}
@@ -400,7 +400,7 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
                     )}
 
                     {viewMode === 'memory' && selectedPersona && (
-                      <AsyncErrorBoundary context="PersonaMemoryDashboard">
+                      <AsyncErrorBoundary>
                         <PersonaMemoryDashboard
                           persona={selectedPersona}
                         />
@@ -486,4 +486,4 @@ export const PersonaManagement: React.FC<PersonaManagementProps> = ({
       </Box>
     </ErrorBoundary>
   );
-}; 
+};

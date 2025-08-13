@@ -1,37 +1,33 @@
-import React, { Suspense } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import React, { Suspense, type ReactNode } from 'react';
+import { CircularProgress, Box } from '@mui/material';
 
 interface LoadingBoundaryProps {
-  children: React.ReactNode;
-  fallback?: React.ReactNode;
-  minHeight?: number;
+  children: ReactNode;
+  fallback?: ReactNode;
+  message?: string;
 }
 
-const DefaultFallback: React.FC<{ minHeight?: number }> = ({ minHeight = 200 }) => (
-  <Box
-    sx={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: minHeight,
-      gap: 2,
-    }}
-  >
-    <CircularProgress size={40} />
-    <Typography variant="body2" color="text.secondary">
-      Loading component...
-    </Typography>
-  </Box>
-);
-
-export const LoadingBoundary: React.FC<LoadingBoundaryProps> = ({
-  children,
+export const LoadingBoundary: React.FC<LoadingBoundaryProps> = ({ 
+  children, 
   fallback,
-  minHeight = 200,
+  message = 'Loading...'
 }) => {
+  const defaultFallback = (
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      minHeight="200px"
+      gap={2}
+    >
+      <CircularProgress />
+      {message && <Box component="span">{message}</Box>}
+    </Box>
+  );
+
   return (
-    <Suspense fallback={fallback || <DefaultFallback minHeight={minHeight} />}>
+    <Suspense fallback={fallback || defaultFallback}>
       {children}
     </Suspense>
   );

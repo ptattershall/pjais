@@ -1,4 +1,4 @@
-import React, { lazy, useState, useEffect } from 'react';
+import React, { lazy, useState } from 'react';
 import {
   Box,
   Card,
@@ -16,8 +16,8 @@ import {
   RestoreFromTrash as ResetIcon,
 } from '@mui/icons-material';
 import { PersonaData } from '../../../shared/types/persona';
-import { LoadingBoundary } from '../../common/LoadingBoundary';
-import { ErrorBoundary } from '../../common/ErrorBoundary';
+import { LoadingBoundary } from '../common/LoadingBoundary';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 // Immediately loaded components
 import { BigFiveEditor } from './components';
@@ -96,17 +96,23 @@ export const PersonaAdvancedPersonalityEditor: React.FC<PersonaAdvancedPersonali
     },
   ]);
 
-  const handleBigFiveChange = (trait: keyof PersonaData['personality']['bigFive'], value: number) => {
-    setEditedPersona(prev => ({
-      ...prev,
-      personality: {
-        ...prev.personality,
-        bigFive: {
-          ...prev.personality.bigFive,
-          [trait]: value,
+  const handleBigFiveChange = (
+    trait: 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism',
+    value: number
+  ) => {
+    setEditedPersona(prev => {
+      const personality = prev.personality ?? { bigFive: { openness: 50, conscientiousness: 50, extraversion: 50, agreeableness: 50, neuroticism: 50 } };
+      return {
+        ...prev,
+        personality: {
+          ...personality,
+          bigFive: {
+            ...personality.bigFive,
+            [trait]: value,
+          },
         },
-      },
-    }));
+      };
+    });
     setHasChanges(true);
   };
 

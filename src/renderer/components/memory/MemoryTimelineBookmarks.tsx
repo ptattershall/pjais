@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { MemoryEntity } from '@shared/types/memory';
+import { MemoryEntity } from '../../../shared/types/memory';
 
 // Bookmark and filter types
 export interface TimelineBookmark {
@@ -214,8 +214,9 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
     <div className="memory-timeline-bookmarks">
       <div className="bookmarks-controls">
         <div className="filter-presets">
-          <label>Quick Filters:</label>
+          <label htmlFor="filter-presets-select">Quick Filters:</label>
           <select
+            id="filter-presets-select"
             value={selectedPreset}
             onChange={(e) => {
               setSelectedPreset(e.target.value);
@@ -223,6 +224,7 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
                 handleFilterChange(defaultPresets[e.target.value]);
               }
             }}
+            title="Quick Filters Preset"
           >
             <option value="">Select preset...</option>
             {Object.entries(defaultPresets).map(([key]) => (
@@ -257,8 +259,9 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
           <h4>Temporal Filters</h4>
           
           <div className="filter-row">
-            <label>Importance Threshold:</label>
+            <label htmlFor="importance-threshold-slider">Importance Threshold:</label>
             <input
+              id="importance-threshold-slider"
               type="range"
               min="0"
               max="100"
@@ -269,8 +272,10 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
                   importanceThreshold: parseInt(e.target.value),
                 });
               }}
+              title="Set importance threshold filter"
+              aria-label="Importance threshold"
             />
-            <span>{currentFilter.importanceThreshold || 0}</span>
+            <span aria-live="polite">{currentFilter.importanceThreshold || 0}</span>
           </div>
         </div>
       </div>
@@ -324,30 +329,40 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
             <h3>Create Timeline Bookmark</h3>
             
             <div className="form-field">
-              <label>Name:</label>
+              <label htmlFor="bookmark-name-input">Name:</label>
               <input
-                type="text"
-                value={newBookmarkData.name || ''}
-                onChange={(e) => setNewBookmarkData(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Bookmark name..."
+                  id="bookmark-name-input"
+                  type="text"
+                  value={newBookmarkData.name || ''}
+                  onChange={(e) => setNewBookmarkData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Bookmark name..."
+                  title="Enter bookmark name"
+                  aria-label="Bookmark name"
+                  aria-required="true"
               />
             </div>
 
             <div className="form-field">
-              <label>Description:</label>
+              <label htmlFor="bookmark-description-textarea">Description:</label>
               <textarea
+                id="bookmark-description-textarea"
                 value={newBookmarkData.description || ''}
                 onChange={(e) => setNewBookmarkData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Optional description..."
+                title="Enter bookmark description"
+                aria-label="Bookmark description"
               />
             </div>
 
             <div className="form-field">
-              <label>Color:</label>
+              <label htmlFor="bookmark-color-input">Color:</label>
               <input
+                id="bookmark-color-input"
                 type="color"
                 value={newBookmarkData.color || '#3498db'}
                 onChange={(e) => setNewBookmarkData(prev => ({ ...prev, color: e.target.value }))}
+                title="Select bookmark color"
+                aria-label="Bookmark color"
               />
             </div>
 
@@ -391,4 +406,4 @@ export const MemoryTimelineBookmarks: React.FC<MemoryTimelineBookmarksProps> = (
       )}
     </div>
   );
-}; 
+};
